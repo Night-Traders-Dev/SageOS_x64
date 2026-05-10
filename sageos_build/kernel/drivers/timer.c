@@ -109,6 +109,20 @@ void timer_irq(void) {
 
 void timer_poll(void) {
     total_loops++;
+
+    /*
+     * Drive the framebuffer periodic flip even when the PIT IRQ is not
+     * active (firmware-input mode: timer_init() / idt_init() are skipped).
+     * The shell idle loop calls timer_poll() on every iteration, so this
+     * fires roughly every 100 000 calls ≈ 10 times/second on a ~1 GHz CPU.
+     * On QEMU (PIT active), the timer IRQ already handles the flip; the
+     * extra call here is cheap (just a no-op memcpy of unchanged pixels).
+     */
+    static volatile uint32_t fb_poll_counter = 0;
+    if (++fb_poll_counter >= 100000) {
+        fb_poll_counter = 0;
+        console_periodic_flip();
+    }
 }
 
 void timer_idle_poll(void) {

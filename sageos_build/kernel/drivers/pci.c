@@ -109,12 +109,15 @@ static void pci_probe(uint8_t bus, uint8_t device, uint8_t func) {
 void pci_enumerate(void) {
     pci_dev_count = 0;
 
-    for (int bus = 0; bus < 256; bus++) {
+    int empty_buses = 0;
+    for (int bus = 0; bus < 256 && empty_buses < 8; bus++) {
+        int bus_had_device = 0;
         for (int dev = 0; dev < 32; dev++) {
             uint32_t reg0 = pci_config_read((uint8_t)bus, (uint8_t)dev, 0, 0x00);
             uint16_t vendor = reg0 & 0xFFFF;
             if (vendor == 0xFFFF) continue;
 
+            bus_had_device = 1;
             pci_probe((uint8_t)bus, (uint8_t)dev, 0);
 
             /* Check multi-function bit */
@@ -126,6 +129,10 @@ void pci_enumerate(void) {
                 }
             }
         }
+        if (bus_had_device)
+            empty_buses = 0;
+        else
+            empty_buses++;
     }
 }
 

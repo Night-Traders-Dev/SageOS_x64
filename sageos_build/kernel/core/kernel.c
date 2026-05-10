@@ -145,6 +145,16 @@ void kmain(SageOSBootInfo *info) {
     console_write("\n");
     console_write("Type help to list commands.\n");
 
+    /*
+     * Flush the back buffer to the physical framebuffer now.
+     * In firmware-input mode (boot_services_active=1) the PIT timer is not
+     * initialized, so timer_irq() / console_periodic_flip() never fires
+     * automatically.  Without this explicit flush the entire boot banner
+     * stays in the back buffer and the screen appears blank (only the
+     * status bar, which flips immediately, is visible).
+     */
+    console_periodic_flip();
+
     dmesg_log("creating main shell thread");
 
     /* Create main shell thread */
