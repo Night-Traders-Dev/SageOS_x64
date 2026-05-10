@@ -6,6 +6,7 @@
 
 #include "gc.h"
 #include "token.h"
+#include "value.h"
 
 #define MAX_LOOP_DEPTH 64
 #define MAX_BREAK_PATCHES 256
@@ -123,6 +124,16 @@ static int add_constant(BytecodeCompiler* compiler, Value value) {
 }
 
 static int add_name_constant(BytecodeCompiler* compiler, const char* start, int length) {
+    for (int i = 0; i < compiler->chunk->constant_count; i++) {
+        Value val = compiler->chunk->constants[i];
+        if (IS_STRING(val)) {
+            const char* s = AS_STRING(val);
+            if (strlen(s) == (size_t)length && strncmp(s, start, length) == 0) {
+                return i;
+            }
+        }
+    }
+
     char* name = SAGE_ALLOC((size_t)length + 1);
     memcpy(name, start, (size_t)length);
     name[length] = '\0';

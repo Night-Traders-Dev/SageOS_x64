@@ -7,6 +7,7 @@
 
 #include "metal_vm.h"
 #include <stdint.h>
+#include "console.h"
 
 // Bare-metal libc stubs (from bare_metal.c or provided by host)
 extern void* memset(void* s, int c, unsigned long n);
@@ -709,10 +710,14 @@ int metal_vm_step(MetalVM* vm) {
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
             unsigned int hash = fnv1a_hash(name, (int)strlen(name));
             MetalValue val;
-            if (scope_lookup(vm, hash, &val))
+            if (scope_lookup(vm, hash, &val)) {
                 metal_vm_push(vm, val);
-            else
+            } else {
+                console_write("[debug] OP_GET_GLOBAL nil lookup: ");
+                console_write(name);
+                console_write("\n");
                 metal_vm_push(vm, mv_nil());
+            }
             break;
         }
 
@@ -951,6 +956,12 @@ int metal_vm_step(MetalVM* vm) {
                 return 0;
             }
             MetalValue callee = vm->stack[vm->sp - argc - 1];
+            
+            // Debug: Log the callee type
+            console_write("[debug] OP_CALL callee type: ");
+            console_u32(callee.type);
+            console_write("\n");
+            
             if (callee.type == MV_STR) {
                 const char* name = metal_string_get(vm, callee.as.str_idx);
                 unsigned int hash = metal_fnv1a(name);
@@ -1005,6 +1016,10 @@ int metal_vm_step(MetalVM* vm) {
             if (callee.type != MV_STR && callee.type != MV_FN) {
                 console_write("OP_CALL: unsupported target type ");
                 console_u32(callee.type);
+                console_write(" at IP: ");
+                console_hex64((uint64_t)vm->ip);
+                console_write(" SP: ");
+                console_u32((uint32_t)vm->sp);
                 console_write("\n");
                 vm->error = 1;
                 vm->error_msg = "Metal VM: unsupported call target";

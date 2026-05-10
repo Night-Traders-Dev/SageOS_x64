@@ -547,8 +547,15 @@ static MetalValue n_execelf(MetalVM *vm, MetalValue *a, int c) {
     if (!fd) { console_write("\nexecelf: no such file: "); console_write(path); return mv_nil(); }
     elf_exec(fd, sz); return mv_nil();
 }
+static int g_shell_exec_active = 0;
 static MetalValue n_shell_exec(MetalVM *vm, MetalValue *a, int c) {
+    if (g_shell_exec_active) {
+        console_write("\n[debug] shell_exec reentrancy detected!\n");
+        return mv_nil();
+    }
+    g_shell_exec_active = 1;
     shell_exec_command(arg_str(vm, a, c, 0));
+    g_shell_exec_active = 0;
     return mv_nil();
 }
 static MetalValue n_shell_completion_count(MetalVM *vm, MetalValue *a, int c) {
@@ -672,7 +679,7 @@ static void register_natives(MetalVM *vm) {
     /* Color */
     REG("os_set_color_hex", n_set_color_hex);
     REG("os_set_color",     n_set_color);
-    REG("os_get_color",     n_get_color);
+    REG("os_get_color_debug", n_get_color);
     /* Console */
     REG("os_console_clear", n_console_clear);
     REG("os_cursor_home",   n_cursor_home);
