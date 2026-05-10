@@ -90,7 +90,6 @@ static int caps_lock;
 static int ctrl_down;
 static int alt_down;
 static int extended_prefix;
-static int firmware_input_reset_done;
 
 static int firmware_input_available(void) {
     SageOSBootInfo *b = console_boot_info();
@@ -111,17 +110,16 @@ static EFI_SIMPLE_TEXT_INPUT_PROTOCOL *firmware_con_in(void) {
     return (EFI_SIMPLE_TEXT_INPUT_PROTOCOL *)(uintptr_t)b->con_in;
 }
 
-static void firmware_input_reset_once(void) {
-    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *con_in;
-
-    if (firmware_input_reset_done) return;
-    firmware_input_reset_done = 1;
-
-    con_in = firmware_con_in();
-    if (!con_in || !con_in->Reset) return;
-
-    con_in->Reset(con_in, 0);
-}
+/*
+ * firmware_input_reset_once() — REMOVED.
+ *
+ * Calling EFI_SIMPLE_TEXT_INPUT_PROTOCOL::Reset() after the kernel has
+ * already taken the framebuffer leaves ConIn in a broken state on the
+ * Lenovo 300e (AMD Stoney Ridge / Chromebook EC): ReadKeyStroke always
+ * returns EFI_NOT_READY after the reset, silently killing all keyboard
+ * input.  The UEFI firmware initializes ConIn correctly at startup;
+ * there is nothing to reset here.
+ */
 
 const char *keyboard_backend(void) {
     if (!firmware_input_available()) return "i8042-irq+poll+serial";
@@ -179,7 +177,6 @@ void keyboard_init(void) {
     ctrl_down = 0;
     alt_down = 0;
     extended_prefix = 0;
-    firmware_input_reset_done = 0;
 
     if (firmware_input_available() && !firmware_i8042_fallback_enabled()) return;
 
@@ -231,7 +228,8 @@ static int firmware_poll_key(KeyEvent *ev) {
     con_in = firmware_con_in();
     if (!con_in || !con_in->ReadKeyStroke) return 0;
 
-    firmware_input_reset_once();
+    /* Do NOT call Reset() here — see tombstone comment above.
+     * Reset breaks ConIn on real Lenovo 300e hardware. */
 
     EFI_INPUT_KEY key;
     key.ScanCode   = 0;
