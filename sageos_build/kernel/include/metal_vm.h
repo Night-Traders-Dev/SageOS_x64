@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 #ifndef METAL_STRING_POOL
-#define METAL_STRING_POOL     32768   // String storage bytes
+#define METAL_STRING_POOL     65536   // String storage bytes
 #endif
 
 #ifndef METAL_HEAP_SIZE
@@ -38,7 +38,7 @@ extern "C" {
 #endif
 
 #ifndef METAL_CONST_POOL
-#define METAL_CONST_POOL      1024    // Constant pool entries
+#define METAL_CONST_POOL      2048    // Constant pool entries
 #endif
 
 #ifndef METAL_ENV_DEPTH

@@ -342,7 +342,10 @@ MetalValue metal_vm_peek(MetalVM* vm, int distance) {
 // ============================================================================
 
 int metal_string_intern(MetalVM* vm, const char* s, int len) {
-    if (len < 0) return -1;
+    if (vm->string_used + len + 1 >= METAL_STRING_POOL) {
+        console_write("Metal VM: STRING POOL OVERFLOW\n");
+        return 0;
+    }
     // Check if already interned
     int search = 0;
     while (search < vm->string_used) {
@@ -960,6 +963,19 @@ int metal_vm_step(MetalVM* vm) {
             // Debug: Log the callee type
             console_write("[debug] OP_CALL callee type: ");
             console_u32(callee.type);
+            if (callee.type == MV_STR) {
+                console_write(" (");
+                console_write(metal_string_get(vm, callee.as.str_idx));
+                console_write(")");
+            } else if (callee.type == MV_FN) {
+                console_write(" (fn index: ");
+                console_u32(callee.as.fn_idx);
+                console_write(")");
+            } else if (callee.type == MV_ARR) {
+                console_write(" (ARR index: ");
+                console_u32(callee.as.arr_idx);
+                console_write(")");
+            }
             console_write("\n");
             
             if (callee.type == MV_STR) {
@@ -1020,6 +1036,12 @@ int metal_vm_step(MetalVM* vm) {
                 console_hex64((uint64_t)vm->ip);
                 console_write(" SP: ");
                 console_u32((uint32_t)vm->sp);
+                console_write("\nStack (top 5): ");
+                for (int i = 0; i < 5 && i < vm->sp; i++) {
+                    console_write("[");
+                    console_u32(vm->stack[vm->sp - 1 - i].type);
+                    console_write("] ");
+                }
                 console_write("\n");
                 vm->error = 1;
                 vm->error_msg = "Metal VM: unsupported call target";
