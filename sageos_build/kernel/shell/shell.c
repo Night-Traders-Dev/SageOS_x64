@@ -58,11 +58,11 @@ static int  shell_history_nav;
 
 static const char *const shell_commands[] = {
     "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
-    "acpi tables", "battery", "btop", "cat", "clear", "color", "dmesg", "echo",
-    "execelf", "exit", "fb", "halt", "help", "input", "install", "keydebug", "ls",
-    "mkdir", "nano", "neofetch", "net", "net selftest", "pci", "poweroff", "q", "reboot", "rm", "sage",
-    "sched",
-    "sageshell", "sdhci", "sh", "shutdown", "smp", "smp start", "source", "stat",
+    "acpi tables", "battery", "btop", "cat", "clear", "color", "cp", "dmesg", "echo",
+    "execelf", "exit", "fb", "halt", "help", "hexdump", "history", "input", "install",
+    "keydebug", "ls", "mkdir", "nano", "neofetch", "net", "net selftest",
+    "pci", "poweroff", "pwd", "q", "reboot", "rm", "sage",
+    "sched", "sageshell", "sdhci", "sh", "shutdown", "smp", "smp start", "source", "stat",
     "status", "stop", "suspend", "swap", "sysinfo", "timer", "touch", "uname", "version",
     "wifi", "write",
 };
@@ -343,17 +343,40 @@ static void help(void) {
     console_write("\n  about             project summary");
     console_write("\n  sysinfo           CPU frequency, RAM, and storage usage");
     console_write("\n  exit              exit QEMU (no-op on real hardware)");
+    console_write("\n\nFilesystem:");
+    console_write("\n  pwd               print working directory");
+    console_write("\n  ls [path]         list directory (default: /)");
+    console_write("\n  cat <path>        print file contents");
+    console_write("\n  cp <src> <dst>    copy file");
+    console_write("\n  mkdir <path>      create a directory");
+    console_write("\n  touch <path>      create an empty file");
+    console_write("\n  rm <path>         remove a file or empty directory");
+    console_write("\n  stat <path>       show file/directory info");
+    console_write("\n  write <path> <s>  write text to a file");
+    console_write("\n  hexdump <path>    hex dump file (first 4KB)");
+    console_write("\n  nano <path>       edit a text file");
+    console_write("\n  sh <path>         run a shell script");
+    console_write("\n  source <path>     run a shell script");
+    console_write("\n  execelf <path>    execute ELF binary");
     console_write("\n\nShell editing:");
-    console_write("\n  Up/Down arrows    history navigation (newest first)");
-    console_write("\n  Left/Right arrows cursor move");
+    console_write("\n  Up/Down           history navigation (newest first)");
+    console_write("\n  Left/Right        cursor move");
     console_write("\n  Home/End          jump to start/end of line");
     console_write("\n  Tab               autocomplete / show completions");
-    console_write("\n  Ctrl-A/Ctrl-E     jump begin/end");
-    console_write("\n  Ctrl-U            clear input line");
+    console_write("\n  Ctrl-A / Ctrl-E   jump to start / end of line");
+    console_write("\n  Ctrl-K            kill to end of line");
+    console_write("\n  Ctrl-U            clear entire line");
+    console_write("\n  Ctrl-W            delete word backwards");
     console_write("\n  Ctrl-C            cancel current line");
+    console_write("\n\nHistory:");
+    console_write("\n  history           show command history list");
+    console_write("\n\nDisplay:");
+    console_write("\n  echo <text>       print text");
+    console_write("\n  color <name>      white green amber blue red cyan purple reset");
+    console_write("\n  dmesg             early kernel log");
     console_write("\n  fb                framebuffer info");
     console_write("\n  input             input backend info");
-    console_write("\n  install           install to local drive");
+    console_write("\n\nHardware & Platform:");
     console_write("\n  status            show top-bar metrics");
     console_write("\n  timer             show PIT timer info");
     console_write("\n  sched             show scheduler queues and threads");
@@ -369,24 +392,12 @@ static void help(void) {
     console_write("\n  net selftest      build sample ARP and DHCP frames");
     console_write("\n  wifi              QCA6174A Wi-Fi probe details");
     console_write("\n  sdhci             eMMC/SD controller info");
-    console_write("\n  ls [path]         list directory (default: /)");
-    console_write("\n  cat <path>        print file contents");
-    console_write("\n  mkdir <path>      create a directory");
-    console_write("\n  touch <path>      create an empty file");
-    console_write("\n  rm <path>         remove a file or empty directory");
-    console_write("\n  stat <path>       show file/directory info");
-    console_write("\n  write <path> <text>  write text to a file");
-    console_write("\n  nano <path>       edit a text file");
-    console_write("\n  sh <path>         run a shell script");
-    console_write("\n  source <path>     run a shell script");
-    console_write("\n  execelf <path>    execute ELF binary");
+    console_write("\n  install           install to local drive");
+    console_write("\n\nSageLang:");
     console_write("\n  sage              interactive SageLang REPL");
-    console_write("\n  sage <code>       execute one Sage statement");
-    console_write("\n  sage run <path>   execute a .sage or .sgvm file");
-    console_write("\n  sageshell         launch SageShell (experimental)");
-    console_write("\n  echo <text>       print text");
-    console_write("\n  color <name>      white green amber blue red");
-    console_write("\n  dmesg             early log");
+    console_write("\n  sage run <path>   execute .sage or .sgvm file");
+    console_write("\n  sageshell         launch SageShell");
+    console_write("\n\nPower:");
     console_write("\n  shutdown          ACPI S5 shutdown");
     console_write("\n  poweroff          alias for shutdown");
     console_write("\n  suspend           ACPI S3 suspend");
@@ -413,12 +424,110 @@ static void cmd_color(const char *name) {
     if (streq(name, "amber"))  { console_set_fg(0xFFBF40); console_write("\ncolor set to amber");  return; }
     if (streq(name, "blue"))   { console_set_fg(0x80C8FF); console_write("\ncolor set to blue");   return; }
     if (streq(name, "red"))    { console_set_fg(0xFF7070); console_write("\ncolor set to red");    return; }
-    console_write("\nusage: color <white|green|amber|blue|red>");
+    if (streq(name, "cyan"))   { console_set_fg(0x40E8E8); console_write("\ncolor set to cyan");   return; }
+    if (streq(name, "purple")) { console_set_fg(0xDDA0FF); console_write("\ncolor set to purple"); return; }
+    if (streq(name, "reset"))  { console_set_fg(0xE8E8E8); console_write("\ncolor reset");         return; }
+    console_write("\nusage: color <white|green|amber|blue|red|cyan|purple|reset>");
+}
+
+static void cmd_history(void) {
+    if (shell_history_count == 0) { console_write("\n(no history)"); return; }
+    for (int i = shell_history_count - 1; i >= 0; i--) {
+        int idx = history_physical_index(i);
+        console_write("\n  ");
+        console_u32((uint32_t)(shell_history_count - i));
+        console_write("  ");
+        console_write(shell_history[idx]);
+    }
+}
+
+static void cmd_cp(const char *args) {
+    /* cp <src> <dst> */
+    const char *s = args;
+    while (*s && *s != ' ') s++;
+    if (!*s) { console_write("\nusage: cp <src> <dst>"); return; }
+    char src[256];
+    int slen = (int)(s - args);
+    if (slen >= 256) slen = 255;
+    for (int i = 0; i < slen; i++) src[i] = args[i];
+    src[slen] = 0;
+    const char *dst = skip_spaces(s);
+    if (!*dst) { console_write("\nusage: cp <src> <dst>"); return; }
+
+    /* Read source in 512-byte chunks, write to dst */
+    char buf[512];
+    uint64_t off = 0;
+    int first = 1;
+    vfs_create(dst);
+    while (1) {
+        int n = vfs_read(src, off, buf, 512);
+        if (n <= 0) {
+            if (n < 0 && first) {
+                console_write("\ncp: "); console_write(src);
+                console_write(": "); console_write(vfs_strerror(n));
+            }
+            break;
+        }
+        int r = vfs_write(dst, off, buf, (size_t)n);
+        if (r < 0) { console_write("\ncp: write error: "); console_write(vfs_strerror(r)); break; }
+        off += (uint64_t)n;
+        first = 0;
+    }
+}
+
+static void cmd_hexdump(const char *path) {
+    if (!*path) { console_write("\nusage: hexdump <path>"); return; }
+    char buf[256];
+    uint64_t off = 0;
+    int first = 1;
+    static const char hex[] = "0123456789abcdef";
+    while (1) {
+        int n = vfs_read(path, off, buf, 16);
+        if (n <= 0) {
+            if (n < 0 && first) {
+                console_write("\nhexdump: "); console_write(path);
+                console_write(": "); console_write(vfs_strerror(n));
+            }
+            break;
+        }
+        first = 0;
+        /* offset */
+        char tmp[10];
+        uint64_t o = off;
+        for (int i = 7; i >= 0; i--) { tmp[i] = hex[o & 0xF]; o >>= 4; }
+        tmp[8] = 0;
+        console_write("\n"); console_write(tmp); console_write("  ");
+        /* hex bytes */
+        for (int i = 0; i < 16; i++) {
+            if (i < n) {
+                char hx[3];
+                hx[0] = hex[((uint8_t)buf[i]) >> 4];
+                hx[1] = hex[((uint8_t)buf[i]) & 0xF];
+                hx[2] = 0;
+                console_write(hx);
+                console_putc(' ');
+            } else {
+                console_write("   ");
+            }
+            if (i == 7) console_putc(' ');
+        }
+        console_write(" |");
+        /* ASCII */
+        for (int i = 0; i < n; i++) {
+            char c = buf[i];
+            console_putc((c >= 32 && c < 127) ? c : '.');
+        }
+        console_putc('|');
+        off += (uint64_t)n;
+        if (off >= 4096) { console_write("\n(output truncated at 4KB)"); break; }
+    }
 }
 
 void shell_exec_command(const char *cmd) {
     cmd = skip_spaces(cmd);
     if (streq(cmd, "")) return;
+    if (starts_word(cmd, "pwd"))     { console_write("\n/"); return; }
+    if (starts_word(cmd, "history")) { cmd_history(); return; }
     if (starts_word(cmd, "help"))         { help(); return; }
     if (starts_word(cmd, "clear"))        { console_clear(); return; }
     if (starts_word(cmd, "btop"))         { cmd_btop(); return; }
@@ -577,9 +686,11 @@ void shell_exec_command(const char *cmd) {
         sage_execute(mod);
         return;
     }
-    if (starts_with(cmd, "echo"))  { console_write("\n"); console_write(arg_after(cmd, "echo")); return; }
-    if (starts_word(cmd, "color")) { cmd_color(arg_after(cmd, "color")); return; }
-    // if (starts_word(cmd, "dmesg")) { cmd_dmesg(); return; }
+    if (starts_with(cmd, "echo"))    { console_write("\n"); console_write(arg_after(cmd, "echo")); return; }
+    if (starts_word(cmd, "color"))   { cmd_color(arg_after(cmd, "color")); return; }
+    if (starts_with(cmd, "cp"))      { cmd_cp(arg_after(cmd, "cp")); return; }
+    if (starts_with(cmd, "hexdump")) { cmd_hexdump(arg_after(cmd, "hexdump")); return; }
+    if (starts_word(cmd, "dmesg"))   { extern void cmd_dmesg(void); cmd_dmesg(); return; }
     if (starts_word(cmd, "shutdown") || starts_word(cmd, "poweroff")) { power_shutdown(); return; }
     if (starts_word(cmd, "suspend")) { power_suspend(); return; }
     if (starts_word(cmd, "halt"))    { power_halt(); return; }
@@ -697,10 +808,29 @@ void shell_run(void) {
             console_get_cursor(&start_row, &start_col);
             continue;
         }
-        if (c == 1)  { pos = 0;   shell_redraw_line(line, pos, start_row, start_col, displayed_len); displayed_len = len; continue; }
-        if (c == 5)  { pos = len; shell_redraw_line(line, pos, start_row, start_col, displayed_len); displayed_len = len; continue; }
-        if (c == 21) { len = 0; pos = 0; line[0] = 0; shell_redraw_line(line, pos, start_row, start_col, displayed_len); displayed_len = 0; continue; }
-        if (c == 9)  { shell_tab_complete(line, &len, &pos, &start_row, &start_col, displayed_len); displayed_len = len; continue; }
+        if (c == 1)  { pos = 0;   shell_redraw_line(line, pos, start_row, start_col, displayed_len); displayed_len = len; continue; } /* Ctrl-A */
+        if (c == 5)  { pos = len; shell_redraw_line(line, pos, start_row, start_col, displayed_len); displayed_len = len; continue; } /* Ctrl-E */
+        if (c == 11) { /* Ctrl-K: kill to end of line */
+            line[pos] = 0;
+            shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+            displayed_len = pos; len = pos;
+            continue;
+        }
+        if (c == 21) { len = 0; pos = 0; line[0] = 0; shell_redraw_line(line, pos, start_row, start_col, displayed_len); displayed_len = 0; continue; } /* Ctrl-U */
+        if (c == 23) { /* Ctrl-W: delete word backwards */
+            if (pos > 0) {
+                size_t new_pos = pos;
+                while (new_pos > 0 && line[new_pos - 1] == ' ') new_pos--;
+                while (new_pos > 0 && line[new_pos - 1] != ' ') new_pos--;
+                size_t deleted = pos - new_pos;
+                memmove(line + new_pos, line + pos, len - pos + 1);
+                len -= deleted; pos = new_pos;
+                shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+                displayed_len = len;
+            }
+            continue;
+        }
+        if (c == 9)  { shell_tab_complete(line, &len, &pos, &start_row, &start_col, displayed_len); displayed_len = len; continue; } /* Tab */
 
         if (c == 8 || c == 127) {
             if (pos > 0) {
