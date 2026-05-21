@@ -138,7 +138,11 @@ static MetalValue n_read_key(MetalVM *vm, MetalValue *a, int c) {
     for (;;) {
         if (!keyboard_wait_event(&ev)) return mv_dbl(-1.0);
         int code = key_event_code(&ev);
-        if (code >= 0) return mv_dbl((double)code);
+        if (code >= 0) {
+            /* Debug trace */
+            // console_write("n_read_key returning code: "); console_u32((uint32_t)code); console_write("\n");
+            return mv_dbl((double)code);
+        }
     }
 }
 static MetalValue n_poll_char(MetalVM *vm, MetalValue *a, int c) {
@@ -609,10 +613,7 @@ static MetalValue n_status_print(MetalVM *vm, MetalValue *a, int c) {
 static MetalValue n_status_refresh(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; status_refresh(); return mv_nil();
 }
-static MetalValue n_draw_status_bar(MetalVM *vm, MetalValue *a, int c) {
-    console_draw_status_bar(arg_str(vm, a, c, 0));
-    return mv_nil();
-}
+
 static MetalValue n_sysinfo(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; sysinfo_cmd(); return mv_nil();
 }
@@ -798,7 +799,6 @@ static void register_natives(MetalVM *vm) {
     REG("os_sched_migrations",     n_sched_migrations);
     REG("os_status_print",  n_status_print);
     REG("os_status_refresh",n_status_refresh);
-    REG("os_draw_status_bar",n_draw_status_bar);
     REG("os_sysinfo",       n_sysinfo);
     REG("os_timer_info",    n_timer_info);
     REG("os_smp_info",      n_smp_info);
