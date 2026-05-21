@@ -419,7 +419,7 @@ void metal_num_to_str(MetalVM* vm, long long n, int* out_idx) {
 // Native Function Dispatch Table
 // ============================================================================
 
-static void scope_define(MetalVM* vm, unsigned int hash, MetalValue value);
+static void scope_define(MetalVM* vm, unsigned int hash, int name_const_idx, MetalValue value);
 
 int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn) {
     if (vm->native_count >= METAL_NATIVE_MAX) {
@@ -438,7 +438,7 @@ int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn) {
      * name into the current scope as a self-named string so OP_CALL can
      * resolve the registered callback from the callee value.
      */
-    scope_define(vm, metal_fnv1a(name), mv_str(vm, name, (int)strlen(name)));
+    scope_define(vm, metal_fnv1a(name), -1, mv_str(vm, name, (int)strlen(name)));
     return 1;
 }
 
@@ -562,7 +562,7 @@ static int scope_lookup(MetalVM* vm, unsigned int hash, MetalValue* out) {
     return 0;
 }
 
-static void scope_define(MetalVM* vm, unsigned int hash, MetalValue value) {
+static void scope_define(MetalVM* vm, unsigned int hash, int name_const_idx, MetalValue value) {
     MetalScope* s = &vm->scopes[vm->scope_depth];
     // Check if exists in current scope
     for (int i = 0; i < s->count; i++) {
@@ -578,6 +578,7 @@ static void scope_define(MetalVM* vm, unsigned int hash, MetalValue value) {
         return;
     }
     s->name_hash[s->count] = (int)hash;
+    s->name_const_idx[s->count] = name_const_idx;
     s->values[s->count] = value;
     s->count++;
 }
@@ -593,7 +594,7 @@ static void scope_assign(MetalVM* vm, unsigned int hash, MetalValue value) {
         }
     }
     // Not found — define in current scope
-    scope_define(vm, hash, value);
+    scope_define(vm, hash, -1, value);
 }
 
 // ============================================================================
@@ -706,7 +707,7 @@ int metal_vm_step(MetalVM* vm) {
             if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_DEFINE_GLOBAL: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
             unsigned int hash = metal_fnv1a(name);
-            scope_define(vm, hash, val);
+            scope_define(vm, hash, name_idx, val);
             break;
         }
 
@@ -748,7 +749,7 @@ int metal_vm_step(MetalVM* vm) {
             MetalValue val;
             val.type = MV_FN;
             val.as.fn_idx = fn_idx;
-            scope_define(vm, hash, val);
+            scope_define(vm, hash, name_idx, val);
             break;
         }
 
@@ -1007,7 +1008,7 @@ int metal_vm_step(MetalVM* vm) {
                     for (int p = 0; p < fn->param_count; p++) {
                         MetalValue arg = mv_nil();
                         if (p < argc) arg = vm->stack[vm->sp - argc + p];
-                        scope_define(vm, fn->param_name_hashes[p], arg);
+                        scope_define(vm, fn->param_name_hashes[p], -1, arg);
                     }
                     vm->sp = frame->sp_base;
                     return 1;
@@ -1207,6 +1208,20 @@ int metal_vm_step(MetalVM* vm) {
     return 1; // Continue execution
 }
 
+const char* metal_value_type_name(MetalValueType type) {
+    switch (type) {
+        case MV_NIL:  return "Nil";
+        case MV_NUM:  return "Number";
+        case MV_BOOL: return "Bool";
+        case MV_STR:  return "String";
+        case MV_ARR:  return "Array";
+        case MV_DICT: return "Dict";
+        case MV_FN:   return "Function";
+        case MV_PTR:  return "Ptr";
+        default:      return "Unknown";
+    }
+}
+
 int metal_vm_run(MetalVM* vm) {
     while (metal_vm_step(vm)) {
         // Continue executing
@@ -1266,7 +1281,7 @@ MetalValue metal_vm_call(MetalVM* vm, const char* fn_name, MetalValue* args, int
     for (int p = 0; p < fn->param_count; p++) {
         MetalValue arg = mv_nil();
         if (p < argc) arg = vm->stack[vm->sp - argc + p];
-        scope_define(vm, fn->param_name_hashes[p], arg);
+        scope_define(vm, fn->param_name_hashes[p], -1, arg);
     }
     vm->sp = frame->sp_base;
 

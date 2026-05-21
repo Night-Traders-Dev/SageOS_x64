@@ -17,12 +17,137 @@
 #define SAGE_REPL_BLOCK_MAX  2048
 #define SAGE_REPL_PARAM_MAX  8
 
+#define REPL_HISTORY_MAX 32
+static char g_repl_history[REPL_HISTORY_MAX][SAGE_REPL_LINE_MAX];
+static int g_repl_history_count = 0;
+
+static void repl_history_add(const char* line) {
+    if (g_repl_history_count > 0 && strcmp(g_repl_history[g_repl_history_count - 1], line) == 0) {
+        return; // Don't duplicate last
+    }
+    if (g_repl_history_count >= REPL_HISTORY_MAX) {
+        for (int i = 0; i < REPL_HISTORY_MAX - 1; i++) {
+            extern char *sage_strncpy(char *dest, const char *src, size_t n);
+            sage_strncpy(g_repl_history[i], g_repl_history[i + 1], SAGE_REPL_LINE_MAX - 1);
+        }
+        g_repl_history_count = REPL_HISTORY_MAX - 1;
+    }
+    extern char *sage_strncpy(char *dest, const char *src, size_t n);
+    sage_strncpy(g_repl_history[g_repl_history_count], line, SAGE_REPL_LINE_MAX - 1);
+    g_repl_history[g_repl_history_count][SAGE_REPL_LINE_MAX - 1] = 0;
+    g_repl_history_count++;
+}
+
 // Persistent REPL VM
 static MetalVM g_repl_vm;
 static int g_repl_vm_inited = 0;
 
 static void metal_vm_write_char_bridge(char c) {
     console_putc(c);
+}
+
+// ============================================================================
+// AST Debug Print
+// ============================================================================
+
+static void repl_print_ast_expr(Expr* expr, int depth) {
+    if (expr == NULL) { console_write("nil"); return; }
+    for (int i = 0; i < depth; i++) console_write("  ");
+    switch (expr->type) {
+        case EXPR_NUMBER: {
+            union { double d; uint64_t u; } v;
+            v.u = expr->as.number.value;
+            printf("(number %g)", v.d); 
+            break;
+        }
+        case EXPR_STRING: printf("(string \"%s\")", expr->as.string.value); break;
+        case EXPR_BOOL: printf("(bool %s)", expr->as.boolean.value ? "true" : "false"); break;
+        case EXPR_NIL: console_write("(nil)"); break;
+        case EXPR_VARIABLE: printf("(var %.*s)", expr->as.variable.name.length, expr->as.variable.name.start); break;
+        case EXPR_BINARY:
+            printf("(binary %.*s\n", expr->as.binary.op.length, expr->as.binary.op.start);
+            repl_print_ast_expr(expr->as.binary.left, depth + 1); console_write("\n");
+            repl_print_ast_expr(expr->as.binary.right, depth + 1); console_write(")");
+            break;
+        case EXPR_CALL: {
+            console_write("(call\n");
+            repl_print_ast_expr(expr->as.call.callee, depth + 1);
+            for (int i = 0; i < expr->as.call.arg_count; i++) {
+                console_write("\n");
+                repl_print_ast_expr(expr->as.call.args[i], depth + 1);
+            }
+            console_write(")");
+            break;
+        }
+        case EXPR_ARRAY: printf("(array count=%d)", expr->as.array.count); break;
+        case EXPR_DICT: printf("(dict count=%d)", expr->as.dict.count); break;
+        case EXPR_TUPLE: printf("(tuple count=%d)", expr->as.tuple.count); break;
+        case EXPR_INDEX:
+            console_write("(index\n");
+            repl_print_ast_expr(expr->as.index.array, depth + 1); console_write("\n");
+            repl_print_ast_expr(expr->as.index.index, depth + 1); console_write(")");
+            break;
+        case EXPR_GET:
+            printf("(get .%.*s\n", expr->as.get.property.length, expr->as.get.property.start);
+            repl_print_ast_expr(expr->as.get.object, depth + 1); console_write(")");
+            break;
+        case EXPR_SET:
+            if (expr->as.set.object == NULL) {
+                printf("(assign %.*s\n", expr->as.set.property.length, expr->as.set.property.start);
+                repl_print_ast_expr(expr->as.set.value, depth + 1); console_write(")");
+            } else {
+                printf("(set .%.*s\n", expr->as.set.property.length, expr->as.set.property.start);
+                repl_print_ast_expr(expr->as.set.object, depth + 1); console_write("\n");
+                repl_print_ast_expr(expr->as.set.value, depth + 1); console_write(")");
+            }
+            break;
+        default: printf("(expr type=%d)", expr->type); break;
+    }
+}
+
+static void repl_print_ast_stmt(Stmt* stmt, int depth) {
+    if (stmt == NULL) return;
+    for (int i = 0; i < depth; i++) console_write("  ");
+    switch (stmt->type) {
+        case STMT_PRINT:
+            console_write("(print\n");
+            repl_print_ast_expr(stmt->as.print.expression, depth + 1);
+            console_write(")\n");
+            break;
+        case STMT_EXPRESSION:
+            console_write("(expr-stmt\n");
+            repl_print_ast_expr(stmt->as.expression, depth + 1);
+            console_write(")\n");
+            break;
+        case STMT_LET:
+            printf("(let %.*s\n", stmt->as.let.name.length, stmt->as.let.name.start);
+            repl_print_ast_expr(stmt->as.let.initializer, depth + 1);
+            console_write(")\n");
+            break;
+        case STMT_PROC:
+            printf("(proc %.*s param_count=%d)\n", stmt->as.proc.name.length, stmt->as.proc.name.start, stmt->as.proc.param_count);
+            break;
+        case STMT_IF:
+            console_write("(if\n");
+            repl_print_ast_expr(stmt->as.if_stmt.condition, depth + 1);
+            console_write("\n");
+            repl_print_ast_stmt(stmt->as.if_stmt.then_branch, depth + 1);
+            if (stmt->as.if_stmt.else_branch) {
+                for (int i = 0; i < depth; i++) console_write("  ");
+                console_write("else\n");
+                repl_print_ast_stmt(stmt->as.if_stmt.else_branch, depth + 1);
+            }
+            console_write(")\n");
+            break;
+        case STMT_BLOCK:
+            console_write("(block\n");
+            for (Stmt* s = stmt->as.block.statements; s != NULL; s = s->next) {
+                repl_print_ast_stmt(s, depth + 1);
+            }
+            console_write(")\n");
+            break;
+        default: printf("(stmt type=%d)\n", stmt->type); break;
+    }
 }
 
 static void sage_clear_exit_state(void) {
@@ -360,13 +485,35 @@ static int sage_repl_readline(const char* prompt, char* out, size_t cap) {
 
 static void sage_repl_print_help(void) {
     console_write("Sage REPL Commands:\n");
-    console_write("  :help   show this help\n");
-    console_write("  :quit   exit the Sage REPL\n");
-    console_write("  :exit   exit the Sage REPL\n");
-    console_write("  :reset  reset the Sage REPL session\n");
-    console_write("  :clear  clear the console\n");
-    console_write("\n");
-    console_write("Blocks ending with ':' continue on the next prompt.\n");
+    console_write("\nSession:\n");
+    console_write("  :help           Show this help message\n");
+    console_write("  :quit / :exit   Exit the Sage REPL\n");
+    console_write("  :reset          Reset the REPL session\n");
+    console_write("  :clear          Clear the console\n");
+    console_write("  :history [n]    Show recent history\n");
+    console_write("  :search <pat>   Search history for pattern\n");
+    console_write("  :clear-history  Clear history\n");
+    
+    console_write("\nInspection:\n");
+    console_write("  :vars [prefix]  List global bindings\n");
+    console_write("  :type <expr>    Evaluate expression and show its type\n");
+    console_write("  :ast <code>     Show parsed AST for code\n");
+    console_write("  :env            Show the full scope chain\n");
+    console_write("  :doc <name>     Show documentation for a function\n");
+    
+    console_write("\nPerformance:\n");
+    console_write("  :time <expr>    Time a single expression evaluation\n");
+    console_write("  :bench <n> <code> Run code n times and show stats\n");
+    
+    console_write("\nSystem:\n");
+    console_write("  :pwd            Print current working directory\n");
+    console_write("  :cd <dir>       Change working directory\n");
+    console_write("  :ls [dir]       List files in a directory\n");
+    console_write("  :cat <file>     Print file contents\n");
+    console_write("  :sh <cmd>       Execute a kernel shell command\n");
+    console_write("  :gc             Show arena allocator usage\n");
+
+    console_write("\nBlocks ending with ':' continue on the next prompt.\n");
     console_write("Submit an empty continuation line to run the block.\n");
 }
 
@@ -595,9 +742,29 @@ void sage_repl_step(const char* line) {
     sage_clear_exit_state();
 }
 
+static int command_matches(const char* line, const char* cmd, const char** arg_out) {
+    size_t cmd_len = strlen(cmd);
+    if (strncmp(line, cmd, cmd_len) == 0) {
+        if (line[cmd_len] == '\0') {
+            if (arg_out) *arg_out = "";
+            return 1;
+        }
+        if (line[cmd_len] == ' ') {
+            if (arg_out) {
+                const char* p = line + cmd_len;
+                while (*p == ' ') p++;
+                *arg_out = p;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static void sage_repl_run(void) {
     char line[SAGE_REPL_LINE_MAX];
     char block[SAGE_REPL_BLOCK_MAX];
+    const char* arg = NULL;
 
     sage_repl_init();
 
@@ -614,6 +781,8 @@ static void sage_repl_run(void) {
         if (line[0] == '\0') {
             continue;
         }
+
+        repl_history_add(line);
 
         if (strcmp(line, ":quit") == 0 || strcmp(line, ":exit") == 0) {
             break;
@@ -633,6 +802,281 @@ static void sage_repl_run(void) {
 
         if (strcmp(line, ":clear") == 0) {
             console_clear();
+            continue;
+        }
+
+        if (strcmp(line, ":clear-history") == 0) {
+            g_repl_history_count = 0;
+            console_write("History cleared.\n");
+            continue;
+        }
+
+        if (command_matches(line, ":history", &arg)) {
+            int n = 20;
+            if (*arg != '\0') n = atoi(arg);
+            if (n <= 0) n = 20;
+            int start = g_repl_history_count - n;
+            if (start < 0) start = 0;
+            for (int i = start; i < g_repl_history_count; i++) {
+                printf("  %3d  %s\n", i + 1, g_repl_history[i]);
+            }
+            if (g_repl_history_count == 0) console_write("No history.\n");
+            continue;
+        }
+
+        if (command_matches(line, ":search", &arg)) {
+            if (*arg == '\0') {
+                console_write("Usage: :search <pattern>\n");
+            } else {
+                int found = 0;
+                for (int i = 0; i < g_repl_history_count; i++) {
+                    if (strstr(g_repl_history[i], arg) != NULL) {
+                        printf("  %3d  %s\n", i + 1, g_repl_history[i]);
+                        found++;
+                    }
+                }
+                if (found == 0) printf("No matches found for \"%s\".\n", arg);
+                else printf("%d match%s found.\n", found, found == 1 ? "" : "es");
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":vars", &arg)) {
+            MetalScope* s = &g_repl_vm.scopes[0];
+            const char* prefix = (*arg != '\0') ? arg : NULL;
+            int found = 0;
+            for (int i = 0; i < s->count; i++) {
+                const char* name = NULL;
+                if (s->name_const_idx[i] >= 0) {
+                    name = metal_string_get(&g_repl_vm, g_repl_vm.constants[s->name_const_idx[i]].as.str_idx);
+                } else if (s->values[i].type == MV_STR) {
+                    name = metal_string_get(&g_repl_vm, s->values[i].as.str_idx);
+                }
+                
+                if (name) {
+                    if (prefix && strncmp(name, prefix, strlen(prefix)) != 0) continue;
+                    console_write("  ");
+                    console_write(name);
+                    console_write(" = ");
+                    metal_print_value(&g_repl_vm, s->values[i]);
+                    console_write("\n");
+                    found++;
+                }
+            }
+            if (found == 0) {
+                if (prefix) printf("No variables starting with '%s'\n", prefix);
+                else console_write("No variables defined.\n");
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":ast", &arg)) {
+            if (*arg == '\0') {
+                console_write("Usage: :ast <code>\n");
+            } else {
+                init_lexer(arg, "<repl-ast>");
+                parser_init();
+                while (!parser_is_at_end()) {
+                    Stmt* stmt = parse();
+                    if (stmt) {
+                        repl_print_ast_stmt(stmt, 0);
+                    } else {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":type", &arg)) {
+            if (*arg == '\0') {
+                console_write("Usage: :type <expr>\n");
+            } else {
+                init_lexer(arg, "<repl-type>");
+                parser_init();
+                Stmt* stmt = parse();
+                if (stmt && stmt->type == STMT_EXPRESSION) {
+                    BytecodeChunk chunk;
+                    bytecode_chunk_init(&chunk);
+                    char error[128];
+                    if (bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_HYBRID,
+                                                                 sage_repl_build_function, &g_repl_vm,
+                                                                 error, sizeof(error))) {
+                        int const_offset = 0;
+                        sage_import_chunk_constants(&g_repl_vm, &chunk, error, sizeof(error), &const_offset);
+                        sage_patch_main_chunk_indices(&chunk, const_offset);
+                        sage_prepare_vm_for_step(&g_repl_vm);
+                        metal_vm_load(&g_repl_vm, chunk.code, chunk.code_count);
+                        metal_vm_run(&g_repl_vm);
+                        if (!g_repl_vm.error) {
+                            MetalValue val = metal_vm_peek(&g_repl_vm, 0);
+                            metal_print_value(&g_repl_vm, val);
+                            console_write(" : ");
+                            extern const char* metal_value_type_name(MetalValueType type);
+                            console_write(metal_value_type_name(val.type));
+                            console_write("\n");
+                        }
+                        bytecode_chunk_free(&chunk);
+                    }
+                } else {
+                    console_write("sage: :type requires an expression\n");
+                }
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":time", &arg)) {
+            if (*arg == '\0') {
+                console_write("Usage: :time <expr>\n");
+            } else {
+                extern uint64_t timer_ticks(void);
+                uint64_t start = timer_ticks() * 10;
+                sage_repl_step(arg);
+                uint64_t end = timer_ticks() * 10;
+                printf("Time: %u ms\n", (uint32_t)(end - start));
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":env", NULL)) {
+            for (int d = g_repl_vm.scope_depth; d >= 0; d--) {
+                MetalScope* s = &g_repl_vm.scopes[d];
+                printf("Scope %d (%d bindings):\n", d, s->count);
+                for (int i = 0; i < s->count; i++) {
+                    const char* name = NULL;
+                    if (s->name_const_idx[i] >= 0) {
+                        name = metal_string_get(&g_repl_vm, g_repl_vm.constants[s->name_const_idx[i]].as.str_idx);
+                    } else if (s->values[i].type == MV_STR) {
+                        name = metal_string_get(&g_repl_vm, s->values[i].as.str_idx);
+                    }
+                    if (name) {
+                        console_write("  ");
+                        console_write(name);
+                        console_write(" = ");
+                        metal_print_value(&g_repl_vm, s->values[i]);
+                        console_write("\n");
+                    }
+                }
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":bench", &arg)) {
+            if (*arg == '\0') {
+                console_write("Usage: :bench <n> <expr>\n");
+            } else {
+                int n = atoi(arg);
+                if (n <= 0) n = 1;
+                const char* expr = arg;
+                while (*expr != ' ' && *expr != '\0') expr++;
+                while (*expr == ' ') expr++;
+                
+                if (*expr == '\0') {
+                    console_write("Usage: :bench <n> <expr>\n");
+                    continue;
+                }
+
+                extern uint64_t timer_ticks(void);
+                uint64_t start = timer_ticks() * 10;
+                for (int i = 0; i < n; i++) {
+                    sage_repl_step(expr);
+                }
+                uint64_t end = timer_ticks() * 10;
+                uint64_t total = end - start;
+                printf("Bench %d iterations: total %u ms, avg %u.%03u ms\n", 
+                       n, (uint32_t)total, (uint32_t)(total / n), (uint32_t)(((total % n) * 1000) / n));
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":pwd", NULL)) {
+            console_write("/\n");
+            continue;
+        }
+
+        if (command_matches(line, ":cd", NULL)) {
+            // Not implemented yet
+            continue;
+        }
+
+        if (command_matches(line, ":doc", &arg)) {
+            if (*arg == '\0') {
+                console_write("Usage: :doc <name>\n");
+            } else {
+                MetalValue val = metal_vm_lookup(&g_repl_vm, arg);
+                if (val.type == MV_FN) {
+                    console_write("Function ");
+                    console_write(arg);
+                    console_write("\n(docstrings not yet compiled into bytecode)\n");
+                } else if (val.type == MV_STR) {
+                    // Check if it's a native function
+                    extern MetalNativeFn metal_vm_find_native(MetalVM* vm, unsigned int hash);
+                    if (metal_vm_find_native(&g_repl_vm, metal_fnv1a(arg))) {
+                        console_write("Native Function ");
+                        console_write(arg);
+                        console_write("\n");
+                    } else {
+                        printf("No documentation found for \"%s\".\n", arg);
+                    }
+                } else {
+                    printf("No documentation found for \"%s\".\n", arg);
+                }
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":ls", &arg)) {
+            const char* path = (*arg != '\0') ? arg : "/";
+            VfsDirEntry entries[32];
+            int count = vfs_readdir(path, entries, 32);
+            if (count >= 0) {
+                for (int i = 0; i < count; i++) {
+                    console_write(entries[i].name);
+                    if (entries[i].type == VFS_DIRECTORY) console_putc('/');
+                    console_write("  ");
+                }
+                console_putc('\n');
+            } else {
+                printf("ls: cannot access %s\n", path);
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":cat", &arg)) {
+            if (*arg == '\0') {
+                console_write("Usage: :cat <file>\n");
+            } else {
+                VfsStat st;
+                if (vfs_stat(arg, &st) == 0) {
+                    char buf[1024];
+                    int n = vfs_read(arg, 0, buf, sizeof(buf) - 1);
+                    if (n >= 0) {
+                        buf[n] = '\0';
+                        console_write(buf);
+                        if (n == sizeof(buf) - 1) console_write("\n(output truncated)");
+                        console_putc('\n');
+                    }
+                } else {
+                    printf("cat: %s: no such file\n", arg);
+                }
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":sh", &arg)) {
+            if (*arg == '\0') {
+                console_write("Usage: :sh <cmd>\n");
+            } else {
+                extern void shell_exec_command(const char* cmd);
+                shell_exec_command(arg);
+                console_putc('\n');
+            }
+            continue;
+        }
+
+        if (command_matches(line, ":gc", NULL)) {
+            extern size_t sage_arena_used(void);
+            printf("Arena used: %u bytes\n", (uint32_t)sage_arena_used());
             continue;
         }
 

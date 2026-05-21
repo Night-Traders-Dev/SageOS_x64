@@ -42,7 +42,7 @@ extern "C" {
 #endif
 
 #ifndef METAL_ENV_DEPTH
-#define METAL_ENV_DEPTH       128     // Maximum scope chain depth
+#define METAL_ENV_DEPTH       32      // Maximum scope chain depth
 #endif
 
 #ifndef METAL_VARS_PER_SCOPE
@@ -142,6 +142,7 @@ typedef struct {
 
 typedef struct {
     int name_hash[METAL_VARS_PER_SCOPE];    // FNV-1a hash of variable name
+    int name_const_idx[METAL_VARS_PER_SCOPE]; // Index into constant pool for the name
     MetalValue values[METAL_VARS_PER_SCOPE];
     int count;
 } MetalScope;
@@ -260,6 +261,9 @@ MetalValue metal_vm_call(MetalVM* vm, const char* fn_name, MetalValue* args, int
 
 // Look up a global variable by name
 MetalValue metal_vm_lookup(MetalVM* vm, const char* name);
+
+// Get human-readable type name
+const char* metal_value_type_name(MetalValueType type);
 
 // Value constructors
 MetalValue mv_nil(void);
