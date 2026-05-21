@@ -684,6 +684,7 @@ file-backed shell commands and modules
 ✓ SageOSBootInfo extended with log_file + log_offset fields
 ✓ bootlog driver: zero-dependency EFI vtable access, MS-ABI safe, flush-on-write
 ✓ MetalVM scope overflow fix (increased vars/scope and native limits)
+✓ VFS Middleware Migration: High-level routing and resolution moved to Pure SageLang
 ```
 
 ### v0.1.73 — Lid Suspend/Wake
@@ -712,8 +713,9 @@ file-backed shell commands and modules
 ✓ Implement MetalVM bytecode interpreter in the kernel
 ✓ Custom binary artifact format (SGVM) with function metadata
 ✓ Call stack support for non-native Sage functions
+✓ Migrate VFS routing logic to SageLang modules
 - Stabilize MetalVM heap and constant pool management
-- Migrate RamFS and VFS logic to SageLang modules
+- Migrate RamFS logic to SageLang modules
 - Implement SageLang-based driver framework
 ```
 

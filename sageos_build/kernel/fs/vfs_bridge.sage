@@ -4,50 +4,97 @@
 
 let g_vfs_mounts = []
 
-proc vfs_mount(path, backend):
+proc vfs_mount(path, backend_ptr):
     let m = {}
     m["path"] = path
-    m["backend"] = backend
-    g_vfs_mounts.push(m)
+    m["backend"] = backend_ptr
+    os_array_push(g_vfs_mounts, m)
     return 0
 end
 
 proc vfs_resolve(path):
-    # Normalize path (simplified)
     if os_strlen(path) == 0:
         return nil
     end
     
-    # Find longest matching mount point
     let best_m = nil
     let best_len = -1
     
     let i = 0
     let m_count = os_array_len(g_vfs_mounts)
+    
     while i < m_count:
         let m = g_vfs_mounts[i]
         let m_path = m["path"]
         let m_len = os_strlen(m_path)
         
+        # Longest prefix match
         if os_starts_with(path, m_path):
-            if m_len > best_len:
-                best_len = m_len
-                best_m = m
+            let is_match = 0
+            if m_len == 1:
+                let c = os_char_at(m_path, 0)
+                if c == 47: # '/'
+                    is_match = 1
+                end
+            elif os_strlen(path) == m_len:
+                is_match = 1
+            elif os_char_at(path, m_len) == 47: # '/'
+                is_match = 1
+            end
+            
+            if is_match == 1:
+                if m_len > best_len:
+                    best_len = m_len
+                    best_m = m
+                end
+            end
+        end
         i = i + 1
     end
     
-    return best_m
+    if best_m == nil:
+        return nil
+    end
+
+    # Calculate relative path
+    let rel = "/"
+    if best_len > 1:
+        rel = os_substr(path, best_len, os_strlen(path))
+        if os_strlen(rel) == 0:
+            rel = "/"
+        elif os_char_at(rel, 0) != 47: # '/'
+            rel = "/" + rel
+        end
+    else:
+        rel = path
+    end
+
+    let res = {}
+    res["mount"] = best_m
+    res["rel"] = rel
+    return res
 end
 
 proc vfs_stat(path):
-    let m = vfs_resolve(path)
-    if m == nil:
-        return nil
-    end
-    
-    # Delegate to backend (via native call or Sage call)
-    # For now, we still use the C VFS for actual operations
-    return os_stat(path)
+    let res = vfs_resolve(path)
+    if res == nil: return nil end
+    return os_backend_stat(res["mount"]["backend"], res["rel"])
 end
 
-# More VFS operations would go here...
+proc vfs_readdir(path):
+    let res = vfs_resolve(path)
+    if res == nil: return nil end
+    return os_backend_readdir(res["mount"]["backend"], res["rel"])
+end
+
+proc vfs_read(path, offset, size):
+    let res = vfs_resolve(path)
+    if res == nil: return nil end
+    return os_backend_read(res["mount"]["backend"], res["rel"], offset, size)
+end
+
+proc vfs_write(path, offset, data):
+    let res = vfs_resolve(path)
+    if res == nil: return nil end
+    return os_backend_write(res["mount"]["backend"], res["rel"], offset, data)
+end

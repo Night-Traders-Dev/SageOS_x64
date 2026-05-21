@@ -79,6 +79,22 @@ MetalValue n_os_array_len(MetalVM* vm, MetalValue* args, int argc) {
     return mv_dbl((double)metal_array_len(vm, args[0].as.arr_idx));
 }
 
+MetalValue n_os_array_push(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 2 || args[0].type != MV_ARR) return mv_nil();
+    metal_array_push(vm, args[0].as.arr_idx, args[1]);
+    return mv_nil();
+}
+
+MetalValue n_os_num_to_str(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_NUM) return mv_nil();
+    union { double d; uint64_t u; } v;
+    v.u = args[0].as.num_bits;
+    int idx;
+    metal_num_to_str(vm, (long long)v.d, &idx);
+    MetalValue res; res.type = MV_STR; res.as.str_idx = idx;
+    return res;
+}
+
 MetalValue n_os_stat(MetalVM* vm, MetalValue* args, int argc) {
     if (argc < 1 || args[0].type != MV_STR) return mv_nil();
     const char* path = metal_string_get(vm, args[0].as.str_idx);

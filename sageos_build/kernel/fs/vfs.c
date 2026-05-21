@@ -28,9 +28,118 @@ extern MetalValue n_len(MetalVM* vm, MetalValue* args, int argc);
 extern MetalValue n_os_strlen(MetalVM* vm, MetalValue* args, int argc);
 extern MetalValue n_os_starts_with(MetalVM* vm, MetalValue* args, int argc);
 extern MetalValue n_os_array_len(MetalVM* vm, MetalValue* args, int argc);
+extern MetalValue n_os_array_push(MetalVM* vm, MetalValue* args, int argc);
+extern MetalValue n_os_write_str(MetalVM* vm, MetalValue* args, int argc);
+extern MetalValue n_os_num_to_str(MetalVM* vm, MetalValue* args, int argc);
 extern MetalValue n_os_stat(MetalVM* vm, MetalValue* args, int argc);
 
 static void vfs_bridge_write_char(char c) { console_putc(c); }
+
+static MetalValue vfs_mv_dbl(double d) {
+    union { double d; uint64_t u; } v;
+    v.d = d;
+    MetalValue mv; mv.type = MV_NUM; mv.as.num_bits = v.u;
+    return mv;
+}
+
+static MetalValue n_os_backend_stat(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 2 || args[0].type != MV_PTR || args[1].type != MV_STR) return mv_nil();
+    VfsBackend* b = (VfsBackend*)args[0].as.ptr;
+    const char* rel = metal_string_get(vm, args[1].as.str_idx);
+    VfsStat st;
+    if (b->stat(b, rel, &st) == VFS_OK) {
+        int d = metal_dict_new(vm);
+        metal_dict_set(vm, d, metal_string_intern(vm, "name", 4), mv_str(vm, st.name, strlen(st.name)));
+        metal_dict_set(vm, d, metal_string_intern(vm, "type", 4), vfs_mv_dbl((double)st.type));
+        metal_dict_set(vm, d, metal_string_intern(vm, "size", 4), vfs_mv_dbl((double)st.size));
+        MetalValue res; res.type = MV_DICT; res.as.dict_idx = d;
+        return res;
+    }
+    return mv_nil();
+}
+
+static MetalValue n_os_substr(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 3 || args[0].type != MV_STR) return mv_nil();
+    const char* s = metal_string_get(vm, args[0].as.str_idx);
+    
+    union { double d; uint64_t u; } v_start, v_len;
+    v_start.u = args[1].as.num_bits;
+    v_len.u = args[2].as.num_bits;
+    int start = (int)v_start.d;
+    int len = (int)v_len.d;
+
+    int slen = strlen(s);
+    if (start < 0) start = 0;
+    if (start > slen) start = slen;
+    if (start + len > slen) len = slen - start;
+    return mv_str(vm, s + start, len);
+}
+
+static MetalValue n_os_char_at(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 2 || args[0].type != MV_STR) return vfs_mv_dbl(0.0);
+    const char* s = metal_string_get(vm, args[0].as.str_idx);
+    
+    union { double d; uint64_t u; } v_idx;
+    v_idx.u = args[1].as.num_bits;
+    int i = (int)v_idx.d;
+
+    if (i < 0 || i >= (int)strlen(s)) return vfs_mv_dbl(0.0);
+    return vfs_mv_dbl((double)(uint8_t)s[i]);
+}
+
+static MetalValue n_os_backend_readdir(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 2 || args[0].type != MV_PTR || args[1].type != MV_STR) return mv_nil();
+    VfsBackend* b = (VfsBackend*)args[0].as.ptr;
+    const char* rel = metal_string_get(vm, args[1].as.str_idx);
+    VfsDirEntry entries[VFS_DIRENT_MAX];
+    int count = b->readdir(b, rel, entries, VFS_DIRENT_MAX);
+    if (count >= 0) {
+        int arr = metal_array_new(vm);
+        for (int i = 0; i < count; i++) {
+            int d = metal_dict_new(vm);
+            metal_dict_set(vm, d, metal_string_intern(vm, "name", 4), mv_str(vm, entries[i].name, strlen(entries[i].name)));
+            metal_dict_set(vm, d, metal_string_intern(vm, "type", 4), mv_num((uint64_t)entries[i].type));
+            metal_dict_set(vm, d, metal_string_intern(vm, "size", 4), mv_num(entries[i].size));
+            MetalValue item; item.type = MV_DICT; item.as.dict_idx = d;
+            metal_array_push(vm, arr, item);
+        }
+        MetalValue res; res.type = MV_ARR; res.as.arr_idx = arr;
+        return res;
+    }
+    return mv_nil();
+}
+
+static MetalValue n_os_backend_read(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 4 || args[0].type != MV_PTR || args[1].type != MV_STR) return mv_nil();
+    VfsBackend* b = (VfsBackend*)args[0].as.ptr;
+    const char* rel = metal_string_get(vm, args[1].as.str_idx);
+    uint64_t offset = args[2].as.num_bits;
+    size_t size = (size_t)args[3].as.num_bits;
+    
+    /* 
+     * We use the VM heap for temporary read buffer.
+     * Ensure we don't overflow.
+     */
+    if (size > 32768) size = 32768; 
+    uint8_t* tmp = (uint8_t*)&vm->heap[vm->heap_used];
+    if (vm->heap_used + size > METAL_HEAP_SIZE) return mv_nil();
+
+    int n = b->read(b, rel, offset, tmp, size);
+    if (n >= 0) {
+        return mv_str(vm, (const char*)tmp, n);
+    }
+    return mv_nil();
+}
+
+static MetalValue n_os_backend_write(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 4 || args[0].type != MV_PTR || args[1].type != MV_STR || args[3].type != MV_STR) return mv_nil();
+    VfsBackend* b = (VfsBackend*)args[0].as.ptr;
+    const char* rel = metal_string_get(vm, args[1].as.str_idx);
+    uint64_t offset = args[2].as.num_bits;
+    const char* data = metal_string_get(vm, args[3].as.str_idx);
+    int n = b->write(b, rel, offset, data, strlen(data));
+    return mv_num(n >= 0 ? (uint64_t)n : 0);
+}
 
 void vfs_bridge_init(void) {
     if (g_vfs_vm_inited) return;
@@ -41,10 +150,23 @@ void vfs_bridge_init(void) {
     metal_vm_register_native(&g_vfs_vm, "os_strlen", n_os_strlen);
     metal_vm_register_native(&g_vfs_vm, "os_starts_with", n_os_starts_with);
     metal_vm_register_native(&g_vfs_vm, "os_array_len", n_os_array_len);
+    metal_vm_register_native(&g_vfs_vm, "os_array_push", n_os_array_push);
+    metal_vm_register_native(&g_vfs_vm, "os_write_str", n_os_write_str);
+    metal_vm_register_native(&g_vfs_vm, "os_num_to_str", n_os_num_to_str);
     metal_vm_register_native(&g_vfs_vm, "os_stat", n_os_stat);
+    metal_vm_register_native(&g_vfs_vm, "os_backend_stat", n_os_backend_stat);
+    metal_vm_register_native(&g_vfs_vm, "os_backend_readdir", n_os_backend_readdir);
+    metal_vm_register_native(&g_vfs_vm, "os_backend_read", n_os_backend_read);
+    metal_vm_register_native(&g_vfs_vm, "os_backend_write", n_os_backend_write);
+    metal_vm_register_native(&g_vfs_vm, "os_substr", n_os_substr);
+    metal_vm_register_native(&g_vfs_vm, "os_char_at", n_os_char_at);
 
-    metal_vm_load(&g_vfs_vm, vfs_bridge_bytecode, vfs_bridge_bytecode_len);
-    metal_vm_run(&g_vfs_vm);
+    if (!metal_vm_load_binary(&g_vfs_vm, vfs_bridge_bytecode, vfs_bridge_bytecode_len)) {
+        console_write("\n[VFS] Bridge load FAILED");
+    } else if (metal_vm_run(&g_vfs_vm) != 0) {
+        console_write("\n[VFS] Bridge init FAILED: ");
+        console_write(g_vfs_vm.error_msg ? g_vfs_vm.error_msg : "unknown error");
+    }
     g_vfs_vm_inited = 1;
 }
 
@@ -143,6 +265,15 @@ int vfs_mount(const char *mount_path, VfsBackend *backend) {
     m->backend = backend;
     m->active = 1;
     g_mount_count++;
+
+    /* Notify Sage bridge */
+    if (g_vfs_vm_inited) {
+        MetalValue args[2];
+        args[0] = mv_str(&g_vfs_vm, mount_path, strlen(mount_path));
+        args[1] = mv_ptr(backend);
+        metal_vm_call(&g_vfs_vm, "vfs_mount", args, 2);
+    }
+
     return VFS_OK;
 }
 
@@ -252,6 +383,34 @@ static VfsMount *resolve_mount(const char *norm_path, const char **rel_out) {
  * ----------------------------------------------------------------------- */
 
 int vfs_stat(const char *path, VfsStat *out) {
+    if (g_vfs_vm_inited) {
+        MetalValue arg = mv_str(&g_vfs_vm, path, strlen(path));
+        MetalValue res = metal_vm_call(&g_vfs_vm, "vfs_stat", &arg, 1);
+        if (res.type == MV_DICT) {
+            MetalValue v_name = metal_dict_get(&g_vfs_vm, res.as.dict_idx, metal_string_intern(&g_vfs_vm, "name", 4));
+            MetalValue v_type = metal_dict_get(&g_vfs_vm, res.as.dict_idx, metal_string_intern(&g_vfs_vm, "type", 4));
+            MetalValue v_size = metal_dict_get(&g_vfs_vm, res.as.dict_idx, metal_string_intern(&g_vfs_vm, "size", 4));
+            
+            if (v_name.type == MV_STR) {
+                const char* name = metal_string_get(&g_vfs_vm, v_name.as.str_idx);
+                extern char *sage_strncpy(char *dest, const char *src, size_t n);
+                sage_strncpy(out->name, name, VFS_NAME_MAX - 1);
+                out->name[VFS_NAME_MAX-1] = 0;
+            }
+            if (v_type.type == MV_NUM) {
+                union { double d; uint64_t u; } v;
+                v.u = v_type.as.num_bits;
+                out->type = (VfsNodeType)v.d;
+            }
+            if (v_size.type == MV_NUM) {
+                union { double d; uint64_t u; } v;
+                v.u = v_size.as.num_bits;
+                out->size = (uint64_t)v.d;
+            }
+            return VFS_OK;
+        }
+    }
+
     char norm[VFS_MAX_PATH];
     vfs_normalize_path(path, norm, VFS_MAX_PATH);
 
@@ -264,6 +423,40 @@ int vfs_stat(const char *path, VfsStat *out) {
 }
 
 int vfs_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
+    if (g_vfs_vm_inited) {
+        MetalValue arg = mv_str(&g_vfs_vm, path, strlen(path));
+        MetalValue res = metal_vm_call(&g_vfs_vm, "vfs_readdir", &arg, 1);
+        if (res.type == MV_ARR) {
+            int count = metal_array_len(&g_vfs_vm, res.as.arr_idx);
+            if (count > max_entries) count = max_entries;
+            for (int i = 0; i < count; i++) {
+                MetalValue item = metal_array_get(&g_vfs_vm, res.as.arr_idx, i);
+                if (item.type == MV_DICT) {
+                    MetalValue v_name = metal_dict_get(&g_vfs_vm, item.as.dict_idx, metal_string_intern(&g_vfs_vm, "name", 4));
+                    MetalValue v_type = metal_dict_get(&g_vfs_vm, item.as.dict_idx, metal_string_intern(&g_vfs_vm, "type", 4));
+                    MetalValue v_size = metal_dict_get(&g_vfs_vm, item.as.dict_idx, metal_string_intern(&g_vfs_vm, "size", 4));
+                    if (v_name.type == MV_STR) {
+                        const char* name = metal_string_get(&g_vfs_vm, v_name.as.str_idx);
+                        extern char *sage_strncpy(char *dest, const char *src, size_t n);
+                        sage_strncpy(entries[i].name, name, VFS_NAME_MAX - 1);
+                        entries[i].name[VFS_NAME_MAX-1] = 0;
+                    }
+                    if (v_type.type == MV_NUM) {
+                        union { double d; uint64_t u; } v;
+                        v.u = v_type.as.num_bits;
+                        entries[i].type = (VfsNodeType)v.d;
+                    }
+                    if (v_size.type == MV_NUM) {
+                        union { double d; uint64_t u; } v;
+                        v.u = v_size.as.num_bits;
+                        entries[i].size = (uint64_t)v.d;
+                    }
+                }
+            }
+            return count;
+        }
+    }
+
     char norm[VFS_MAX_PATH];
     vfs_normalize_path(path, norm, VFS_MAX_PATH);
 
@@ -276,6 +469,22 @@ int vfs_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
 }
 
 int vfs_read(const char *path, uint64_t offset, void *buffer, size_t size) {
+    if (g_vfs_vm_inited) {
+        MetalValue args[3];
+        args[0] = mv_str(&g_vfs_vm, path, strlen(path));
+        args[1] = mv_num(offset);
+        args[2] = mv_num((uint64_t)size);
+        MetalValue res = metal_vm_call(&g_vfs_vm, "vfs_read", args, 3);
+        if (res.type == MV_STR) {
+            const char* data = metal_string_get(&g_vfs_vm, res.as.str_idx);
+            int n = strlen(data);
+            if (n > (int)size) n = (int)size;
+            extern void *sage_memcpy(void *dest, const void *src, size_t n);
+            sage_memcpy(buffer, data, n);
+            return n;
+        }
+    }
+
     char norm[VFS_MAX_PATH];
     vfs_normalize_path(path, norm, VFS_MAX_PATH);
 
@@ -288,6 +497,17 @@ int vfs_read(const char *path, uint64_t offset, void *buffer, size_t size) {
 }
 
 int vfs_write(const char *path, uint64_t offset, const void *data, size_t size) {
+    if (g_vfs_vm_inited) {
+        MetalValue args[3];
+        args[0] = mv_str(&g_vfs_vm, path, strlen(path));
+        args[1] = mv_num(offset);
+        args[2] = mv_str(&g_vfs_vm, (const char*)data, (int)size);
+        MetalValue res = metal_vm_call(&g_vfs_vm, "vfs_write", args, 3);
+        if (res.type == MV_NUM) {
+            return (int)res.as.num_bits;
+        }
+    }
+
     char norm[VFS_MAX_PATH];
     vfs_normalize_path(path, norm, VFS_MAX_PATH);
 

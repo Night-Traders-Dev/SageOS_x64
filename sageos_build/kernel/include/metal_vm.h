@@ -255,6 +255,12 @@ int metal_vm_run(MetalVM* vm);
 // Execute a single instruction (for cooperative multitasking)
 int metal_vm_step(MetalVM* vm);
 
+// Call a Sage function by name from C
+MetalValue metal_vm_call(MetalVM* vm, const char* fn_name, MetalValue* args, int argc);
+
+// Look up a global variable by name
+MetalValue metal_vm_lookup(MetalVM* vm, const char* name);
+
 // Value constructors
 MetalValue mv_nil(void);
 MetalValue mv_num(uint64_t v);

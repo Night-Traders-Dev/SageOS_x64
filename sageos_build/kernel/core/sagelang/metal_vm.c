@@ -75,12 +75,9 @@ extern int strcmp(const char* s1, const char* s2);
 // Helpers
 // ============================================================================
 
-static unsigned int fnv1a_hash(const char* s, int len) {
+unsigned int metal_fnv1a(const char* s) {
     unsigned int hash = 2166136261u;
-    for (int i = 0; i < len; i++) {
-        hash ^= (unsigned char)s[i];
-        hash *= 16777619u;
-    }
+    while (*s) { hash ^= (unsigned char)(*s++); hash *= 16777619u; }
     return hash;
 }
 
@@ -422,12 +419,6 @@ void metal_num_to_str(MetalVM* vm, long long n, int* out_idx) {
 // Native Function Dispatch Table
 // ============================================================================
 
-static unsigned int metal_fnv1a(const char* s) {
-    unsigned int hash = 2166136261u;
-    while (*s) { hash ^= (unsigned char)(*s++); hash *= 16777619u; }
-    return hash;
-}
-
 static void scope_define(MetalVM* vm, unsigned int hash, MetalValue value);
 
 int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn) {
@@ -714,7 +705,7 @@ int metal_vm_step(MetalVM* vm) {
             MetalValue val = metal_vm_pop(vm);
             if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_DEFINE_GLOBAL: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
-            unsigned int hash = fnv1a_hash(name, (int)strlen(name));
+            unsigned int hash = metal_fnv1a(name);
             scope_define(vm, hash, val);
             break;
         }
@@ -724,7 +715,7 @@ int metal_vm_step(MetalVM* vm) {
             if (vm->error) return 0;
             if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_GET_GLOBAL: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
-            unsigned int hash = fnv1a_hash(name, (int)strlen(name));
+            unsigned int hash = metal_fnv1a(name);
             
             MetalValue val;
             if (scope_lookup(vm, hash, &val)) {
@@ -741,7 +732,7 @@ int metal_vm_step(MetalVM* vm) {
             MetalValue val = metal_vm_pop(vm);
             if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_SET_GLOBAL: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
-            unsigned int hash = fnv1a_hash(name, (int)strlen(name));
+            unsigned int hash = metal_fnv1a(name);
             scope_assign(vm, hash, val);
             break;
         }
@@ -752,7 +743,7 @@ int metal_vm_step(MetalVM* vm) {
             if (vm->error) return 0;
             if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_DEFINE_FN: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
-            unsigned int hash = fnv1a_hash(name, (int)strlen(name));
+            unsigned int hash = metal_fnv1a(name);
 
             MetalValue val;
             val.type = MV_FN;
@@ -1221,4 +1212,70 @@ int metal_vm_run(MetalVM* vm) {
         // Continue executing
     }
     return vm->error ? -1 : 0;
+}
+
+MetalValue metal_vm_lookup(MetalVM* vm, const char* name) {
+    unsigned int hash = metal_fnv1a(name);
+    MetalValue val;
+    if (scope_lookup(vm, hash, &val)) return val;
+    return mv_nil();
+}
+
+MetalValue metal_vm_call(MetalVM* vm, const char* fn_name, MetalValue* args, int argc) {
+    MetalValue callee = metal_vm_lookup(vm, fn_name);
+    if (callee.type != MV_FN) return mv_nil();
+
+    int start_frame = vm->frame_count;
+    int was_halted = vm->halted;
+    vm->halted = 0;
+    
+    // Push callee and args for consistency with CALL frame setup
+    metal_vm_push(vm, callee);
+    for (int i = 0; i < argc; i++) {
+        metal_vm_push(vm, args[i]);
+    }
+
+    int fn_idx = callee.as.fn_idx;
+    MetalFunction* fn = &vm->functions[fn_idx];
+    
+    if (vm->frame_count >= METAL_CALL_STACK) {
+        vm->error = 1;
+        vm->error_msg = "Metal VM: call stack overflow in metal_vm_call";
+        vm->halted = was_halted;
+        return mv_nil();
+    }
+
+    MetalFrame* frame = &vm->call_stack[vm->frame_count++];
+    frame->ip = vm->ip;
+    frame->code = vm->code;
+    frame->code_length = vm->code_length;
+    frame->sp_base = vm->sp - argc - 1;
+    frame->constants = vm->constants;
+    frame->const_count = vm->const_count;
+    
+    vm->code = fn->code;
+    vm->code_length = fn->code_length;
+    vm->ip = 0;
+    vm->constants = fn->constants;
+    vm->const_count = fn->const_count;
+    
+    if (vm->scope_depth < METAL_ENV_DEPTH - 1) {
+        vm->scope_depth++;
+        vm->scopes[vm->scope_depth].count = 0;
+    }
+    for (int p = 0; p < fn->param_count; p++) {
+        MetalValue arg = mv_nil();
+        if (p < argc) arg = vm->stack[vm->sp - argc + p];
+        scope_define(vm, fn->param_name_hashes[p], arg);
+    }
+    vm->sp = frame->sp_base;
+
+    // Run until this specific frame returns
+    while (vm->frame_count > start_frame && !vm->error && !vm->halted) {
+        if (!metal_vm_step(vm)) break;
+    }
+    
+    vm->halted = was_halted;
+    if (vm->error) return mv_nil();
+    return metal_vm_pop(vm);
 }
