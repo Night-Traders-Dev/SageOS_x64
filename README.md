@@ -142,6 +142,10 @@ SageOS_300e/
 
 A comprehensive audit was performed to identify and resolve code quality issues:
 
+### Refactoring (v0.1.73+)
+- **VM Modularization**: Decoupled the kernel-resident SageLang VM from environment-specific libc and I/O dependencies by introducing a **Hardware Abstraction Layer (HAL)**.
+- **Core Abstraction**: Extracted environment-agnostic VM logic (opcodes, stack operations) into a shared core architecture (`vm_core_shared.h`), facilitating shared codebase maintenance between bare-metal kernel and host-based development.
+
 ### Issues Fixed
 
 - **Dead Code Removal**: Removed the `attic/` directory containing outdated and unused code files.
