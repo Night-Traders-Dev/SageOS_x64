@@ -4,11 +4,11 @@
 
 // Native function: bootlog_init(void)
 // This will initialize the bootlog using the current boot info.
-// We expect the boot info to be accessible to the kernel kernel module.
-extern SageOSBootInfo* get_kernel_boot_info(void);
+// We expect the boot info to be accessible via the console boot info function.
+extern SageOSBootInfo* console_boot_info(void);
 
 static MetalValue native_bootlog_init(MetalVM* vm, MetalValue* args, int argc) {
-    bootlog_init(get_kernel_boot_info());
+    bootlog_init(console_boot_info());
     return mv_nil();
 }
 

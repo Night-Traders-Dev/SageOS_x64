@@ -11,6 +11,7 @@
 #include "vfs.h"
 
 extern void register_timer_native_bindings(MetalVM* vm);
+extern void register_bootlog_native_bindings(MetalVM* vm);
 
 #include <stdio.h>
 #include <string.h>
@@ -41,7 +42,7 @@ static void repl_history_add(const char* line) {
 }
 
 // Persistent REPL VM
-static MetalVM g_repl_vm;
+MetalVM g_repl_vm;
 static int g_repl_vm_inited = 0;
 
 static void metal_vm_write_char_bridge(char c) {
@@ -398,6 +399,7 @@ static void sage_register_repl_natives(MetalVM* vm) {
     metal_vm_register_native(vm, "os_get_c0", n_os_get_c0);
     metal_vm_register_native(vm, "os_get_color", n_os_get_color);
     register_timer_native_bindings(vm);
+    register_bootlog_native_bindings(vm);
 }
 
 static void sage_repl_reset_vm(void) {
