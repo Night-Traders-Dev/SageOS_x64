@@ -46,7 +46,7 @@ Recent updates:
 ## Current Version
 
 ```text
-SageOS v0.1.3
+SageOS v0.1.72
 ```
 
 ## Target Hardware
@@ -672,7 +672,7 @@ file-backed shell commands and modules
 ✓ Production-ready graphics performance
 ```
 
-### v0.1.3 — **CURRENT** (Hardware Boot Diagnostics & Stability)
+### v0.1.72 — **CURRENT** (Stability & MetalVM Fixes)
 
 ✓ Phase 8 complete:
 ```text
@@ -683,9 +683,10 @@ file-backed shell commands and modules
 ✓ PCI scan optimised — stops after 8 empty buses (fixes AMD IOMMU wait stall)
 ✓ SageOSBootInfo extended with log_file + log_offset fields
 ✓ bootlog driver: zero-dependency EFI vtable access, MS-ABI safe, flush-on-write
+✓ MetalVM scope overflow fix (increased vars/scope and native limits)
 ```
 
-### v0.1.4 — Lid Suspend/Wake
+### v0.1.73 — Lid Suspend/Wake
 
 ```text
 - ACPI SCI routing and GPE management
@@ -695,7 +696,7 @@ file-backed shell commands and modules
 - Resume path cleanup and validation
 ```
 
-### v0.1.5 — Persistent Storage Expansion
+### v0.1.74 — Persistent Storage Expansion
 
 ```text
 - initrd support for loaded modules
@@ -704,7 +705,7 @@ file-backed shell commands and modules
 - Modular filesystem driver framework
 ```
 
-### v0.1.5 — SageLang Evolution (In Progress)
+### v0.1.75 — SageLang Evolution (In Progress)
 
 ```text
 ✓ Port core shell logic to SageLang
@@ -716,7 +717,7 @@ file-backed shell commands and modules
 - Implement SageLang-based driver framework
 ```
 
-### v0.1.6 — Performance & AOT Optimization
+### v0.1.76 — Performance & AOT Optimization
 
 ```text
 - Optimize MetalVM execution (JIT-lite or threaded interpretation)

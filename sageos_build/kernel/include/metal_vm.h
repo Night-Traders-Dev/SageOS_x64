@@ -46,7 +46,7 @@ extern "C" {
 #endif
 
 #ifndef METAL_VARS_PER_SCOPE
-#define METAL_VARS_PER_SCOPE  128     // Variables per scope level
+#define METAL_VARS_PER_SCOPE  256     // Variables per scope level
 #endif
 
 // ============================================================================
@@ -82,7 +82,7 @@ typedef struct {
 // ============================================================================
 
 #ifndef METAL_NATIVE_MAX
-#define METAL_NATIVE_MAX  128     // Maximum registered native functions
+#define METAL_NATIVE_MAX  256     // Maximum registered native functions
 #endif
 
 // Forward-declare MetalVM as a typedef so callbacks use the same type.

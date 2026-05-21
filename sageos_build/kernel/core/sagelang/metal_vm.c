@@ -431,7 +431,13 @@ static unsigned int metal_fnv1a(const char* s) {
 static void scope_define(MetalVM* vm, unsigned int hash, MetalValue value);
 
 int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn) {
-    if (vm->native_count >= METAL_NATIVE_MAX) return 0;
+    if (vm->native_count >= METAL_NATIVE_MAX) {
+        extern void console_write(const char* s);
+        console_write("Metal VM: native table full: ");
+        console_write(name);
+        console_write("\n");
+        return 0;
+    }
     vm->natives[vm->native_count].name_hash = metal_fnv1a(name);
     vm->natives[vm->native_count].fn = fn;
     vm->native_count++;
@@ -574,7 +580,12 @@ static void scope_define(MetalVM* vm, unsigned int hash, MetalValue value) {
             return;
         }
     }
-    if (s->count >= METAL_VARS_PER_SCOPE) return;
+    if (s->count >= METAL_VARS_PER_SCOPE) {
+        /* In bare-metal, we just drop it, but let's warn if we can. */
+        extern void console_write(const char* s);
+        console_write("Metal VM: scope full, cannot define variable\n");
+        return;
+    }
     s->name_hash[s->count] = (int)hash;
     s->values[s->count] = value;
     s->count++;
