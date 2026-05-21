@@ -49,6 +49,7 @@ void power_shutdown(void) {
     if (sysinfo_is_qemu()) {
         dmesg_log("Power: QEMU detected, exiting via ISA debug port...");
         outw(0x501, 0x00);
+        outw(0xB004, 0x2000); // Common older QEMU/Bochs poweroff port
         for (;;) cpu_hlt();
     }
     dmesg_log("Power: Requesting ACPI S5 poweroff...");
@@ -56,6 +57,7 @@ void power_shutdown(void) {
     if (!acpi_poweroff()) {
         dmesg_log("Power: ACPI S5 failed or unsupported.");
         console_write("\nACPI S5 failed or unsupported.");
+        outw(0xB004, 0x2000); // Fallback if ACPI fails
     }
 }
 
