@@ -76,19 +76,7 @@ static void drain_controller(void) {
     }
 }
 
-static void wait_write(void) {
-    int timeout = 100000;
-    while ((inb(I8042_STATUS) & I8042_IBF) && timeout--) {
-        __asm__ volatile ("pause");
-    }
-}
 
-static void wait_read(void) {
-    int timeout = 100000;
-    while (!(inb(I8042_STATUS) & I8042_OBF) && timeout--) {
-        __asm__ volatile ("pause");
-    }
-}
 
 void keyboard_init(void) {
     scancode_head = 0;
@@ -98,44 +86,6 @@ void keyboard_init(void) {
     ctrl_down = 0;
     alt_down = 0;
     extended_prefix = 0;
-
-    // 1. Flush any stale bytes
-    flush_output();
-
-    // 2. Enable first PS/2 port
-    wait_write();
-    outb(I8042_COMMAND, 0xAE);
-
-    // 3. Read current command byte
-    wait_write();
-    outb(I8042_COMMAND, 0x20);
-    wait_read();
-    uint8_t cb = inb(I8042_DATA);
-
-    // 4. Modify command byte: enable interrupts (bit 0), enable translation (bit 6), enable first port clock (clear bit 4)
-    cb |= 0x01;
-    cb |= 0x40;
-    cb &= ~0x10;
-
-    // 5. Write command byte back
-    wait_write();
-    outb(I8042_COMMAND, 0x60);
-    wait_write();
-    outb(I8042_DATA, cb);
-
-    // 6. Send "Enable Scanning" command (0xF4) directly to the keyboard device
-    wait_write();
-    outb(I8042_DATA, 0xF4);
-    
-    // Flush response (usually ACK 0xFA)
-    int timeout = 1000;
-    while (timeout--) {
-        if (inb(I8042_STATUS) & I8042_OBF) {
-            (void)inb(I8042_DATA);
-        }
-        __asm__ volatile ("pause");
-    }
-
     flush_output();
 }
 
