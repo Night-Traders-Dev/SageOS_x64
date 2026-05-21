@@ -15,6 +15,7 @@ extern void register_bootlog_native_bindings(MetalVM* vm);
 extern void register_power_native_bindings(MetalVM* vm);
 extern void register_status_native_bindings(MetalVM* vm);
 extern void register_battery_native_bindings(MetalVM* vm);
+extern void register_core_drivers_native_bindings(MetalVM* vm);
 
 #include <stdio.h>
 #include <string.h>
@@ -406,18 +407,25 @@ static void sage_register_repl_natives(MetalVM* vm) {
     register_power_native_bindings(vm);
     register_status_native_bindings(vm);
     register_battery_native_bindings(vm);
+    register_core_drivers_native_bindings(vm);
 }
-
 static void sage_repl_reset_vm(void) {
     metal_vm_init(&g_repl_vm);
     g_repl_vm.write_char = metal_vm_write_char_bridge;
     sage_register_repl_natives(&g_repl_vm);
-    g_repl_vm_inited = 1;
+}
+
+void sage_kernel_early_init(void) {
+    if (!g_repl_vm_inited) {
+        sage_repl_reset_vm();
+        g_repl_vm_inited = 1;
+    }
 }
 
 void sage_repl_init(void) {
     if (!g_repl_vm_inited) {
         sage_repl_reset_vm();
+        g_repl_vm_inited = 1;
     }
 }
 

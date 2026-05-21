@@ -99,7 +99,7 @@ Driver bring-up order for SageOS:
 Pragmatic milestone: implement PCI discovery and report the QCA6174A vendor,
 device, BARs, and interrupt first. Do not start with full Wi-Fi association.
 
-## Confirmed Boot Log Values (v0.1.72)
+## Confirmed Boot Log Values (v0.1.83)
 
 Observed on real Lenovo 300e hardware from `BOOTLOG.TXT`:
 
@@ -126,7 +126,7 @@ memory_usable:         ~3.9 GB (0xF617B000)
 - **Framebuffer at 0xF0000000** — this is a high MMIO address. Writes to it are
   write-combined (WC), so large sequential memcpy operations (console_flip) are
   efficient but non-temporal stores may stall if not cache-line aligned.
-- **Boot services complete** — the v0.1.72 boot log shows all kernel init stages
+- **Boot services complete** — the v0.1.83 boot log shows all kernel init stages
   completing normally through `sched_start`. The earlier apparent "hang" was a
   framebuffer flush starvation: the back buffer was populated but never copied to
   the physical framebuffer until the shell thread's first `timer_poll()` overflow.

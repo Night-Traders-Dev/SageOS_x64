@@ -6,6 +6,10 @@ SageOS is a small x86_64 UEFI operating system bring-up project targeting the **
 The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console with graphics acceleration, runs a kernel-resident SageShell with fish-style line editing, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
 
 Recent updates:
+- **Phase 9: Full Driver Migration to SageLang** ✓:
+  - **Modular Architecture**: Replaced hardcoded C driver initializations with SageLang-driven logic using `core_drivers.sage`.
+  - **Native Bridges**: Created native C bridges for all kernel drivers (Timer, Bootlog, Power, Status, Battery, Serial, Keyboard, Framebuffer, ATA, SDHCI, Net, ACPI, Wi-Fi, PCI, SMP, Swap, IDT) to expose HAL primitives and state to the MetalVM.
+  - **SageLang Boot Flow**: The system's entire driver boot sequence is now orchestrated natively in SageLang, validating the capability to execute complex kernel initialization paths purely from bytecode.
 - **Phase 8: Persistent USB Boot Log & Framebuffer Flush Fix** ✓:
   - **USB Boot Log**: The UEFI loader now opens `BOOTLOG.TXT` on the ESP at startup and writes a timestamped log of every boot stage. The open EFI file handle is passed through `SageOSBootInfo` to the kernel, which continues appending via a new `bootlog` driver throughout all of `kmain`. Each write is immediately flushed to FAT32 so the data survives a hard reset — the last line in the file tells you exactly where the hardware hung. See [Boot Log Documentation](docs/boot_log.md).
   - **Framebuffer Flush Fix**: Resolved a display-starvation bug where all kernel boot text was written to the back buffer but never copied to the LCD on real hardware. In firmware-input mode the PIT timer is skipped, so `console_periodic_flip()` was never called. Fix: explicit flush after the startup banner in `kmain`, plus a software counter in `timer_poll()` that fires `console_periodic_flip()` at ~10 Hz without needing a timer IRQ.
@@ -46,7 +50,7 @@ Recent updates:
 ## Current Version
 
 ```text
-SageOS v0.1.72
+SageOS v0.1.83
 ```
 
 ## Target Hardware
@@ -676,7 +680,7 @@ file-backed shell commands and modules
 ✓ Production-ready graphics performance
 ```
 
-### v0.1.72 — **CURRENT** (Stability & MetalVM Fixes)
+### v0.1.83 — **CURRENT** (Stability & MetalVM Fixes)
 
 ✓ Phase 8 complete:
 ```text

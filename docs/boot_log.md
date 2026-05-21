@@ -1,6 +1,6 @@
 # SageOS Persistent USB Boot Log
 
-> Added in **v0.1.72** to diagnose hangs on real hardware (Lenovo 300e).
+> Added in **v0.1.83** to diagnose hangs on real hardware (Lenovo 300e).
 
 ## Overview
 
@@ -122,7 +122,7 @@ cat /mnt/esp/BOOTLOG.TXT
 | System triple-faults before `Flush` returns | Last entry may be truncated. Use the previous complete line. |
 | FAT32 write-protect | File open fails silently; no log is written. |
 
-## Files Changed (v0.1.72)
+## Files Changed (v0.1.83)
 
 | File | Change |
 |---|---|

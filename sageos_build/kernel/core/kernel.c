@@ -30,6 +30,9 @@ extern void register_bootlog_native_bindings(MetalVM* vm);
 extern void register_power_native_bindings(MetalVM* vm);
 extern void register_status_native_bindings(MetalVM* vm);
 extern void register_battery_native_bindings(MetalVM* vm);
+extern void sage_kernel_early_init(void);
+
+extern MetalVM g_repl_vm;
 
 extern int fat32_init(void);
 
@@ -61,17 +64,15 @@ static int firmware_input_mode(SageOSBootInfo *info) {
 void kmain(SageOSBootInfo *info) {
     int firmware_input = firmware_input_mode(info);
 
-    /*
-     * Init the USB boot log first so every subsequent step is captured.
-     * bootlog() is a no-op if log_file == 0.
-     */
-    bootlog_init(info);
+    sage_kernel_early_init();
+
+    metal_vm_call(&g_repl_vm, "bootlog_init_driver", NULL, 0);
     bootlog("[KRN] kmain entered\r\n");
 
-    serial_init();
+    metal_vm_call(&g_repl_vm, "init_serial", NULL, 0);
     bootlog("[KRN] serial_init OK\r\n");
 
-    console_init(info);
+    metal_vm_call(&g_repl_vm, "init_console", NULL, 0);
     bootlog("[KRN] console_init OK\r\n");
 
     dmesg_log("SageOS modular kernel starting...");
@@ -82,40 +83,41 @@ void kmain(SageOSBootInfo *info) {
         : "[KRN] mode: native (boot services exited)\r\n");
 
     bootlog("[KRN] acpi_init: start\r\n");
-    acpi_init(info);
+    metal_vm_call(&g_repl_vm, "init_acpi", NULL, 0);
     dmesg_log("ACPI initialized");
     bootlog("[KRN] acpi_init: OK\r\n");
 
     if (!firmware_input) {
         bootlog("[KRN] smp_init: start\r\n");
-        smp_init();
+        metal_vm_call(&g_repl_vm, "init_smp", NULL, 0);
         dmesg_log("SMP initialized");
         bootlog("[KRN] smp_init: OK\r\n");
     } else {
         bootlog("[KRN] smp_init_firmware_bsp: start\r\n");
-        smp_init_firmware_bsp();
+        metal_vm_call(&g_repl_vm, "init_smp_firmware", NULL, 0);
         dmesg_log("SMP initialized (firmware input mode)");
         bootlog("[KRN] smp_init_firmware_bsp: OK\r\n");
     }
 
     if (!firmware_input) {
         bootlog("[KRN] timer_init: start\r\n");
+        extern void timer_init(void);
         timer_init();
         dmesg_log("timer initialized");
         bootlog("[KRN] timer_init: OK\r\n");
 
         bootlog("[KRN] idt_init: start\r\n");
-        idt_init();
+        metal_vm_call(&g_repl_vm, "init_idt", NULL, 0);
         dmesg_log("IDT initialized");
         bootlog("[KRN] idt_init: OK\r\n");
 
         bootlog("[KRN] ata_init: start\r\n");
-        ata_init();
+        metal_vm_call(&g_repl_vm, "init_ata", NULL, 0);
         dmesg_log("ATA initialized");
         bootlog("[KRN] ata_init: OK\r\n");
 
         bootlog("[KRN] irq_enable\r\n");
-        irq_enable();
+        metal_vm_call(&g_repl_vm, "enable_irq", NULL, 0);
     } else {
         dmesg_log("skipping IDT/timer initialization (firmware input mode)");
         bootlog("[KRN] skipping IDT/timer/IRQ (firmware input mode)\r\n");
