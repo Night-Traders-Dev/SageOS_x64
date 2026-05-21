@@ -397,20 +397,13 @@ qemu_run() {
     #   Run TCG in single-threaded mode; prevents races between the TCG
     #   execution thread and QEMU's I/O thread.
     #
-    # -cpu Skylake-Client
-    #   Exposes CPUID leaf 0x16 (processor frequency information) so
-    #   sysinfo can read base/max MHz directly instead of falling back
-    #   to RDTSC calibration.  Skylake-Client matches the ISA level of
-    #   the Celeron N4020 (Gemini Lake / Goldmont Plus).
-    #
-    # -device isa-debug-exit,iobase=0x501,iosize=2
-    #   Allows the kernel 'exit' command to terminate QEMU cleanly.
-    #   Writing 0x00 to port 0x501 exits with code 1.
+    # -cpu Skylake-Client,-pcid,-tsc-deadline,-hle,-invpcid,-rtm,-xsave
+    #   Disabling features not supported by TCG to suppress warnings.
     if ! qemu-system-x86_64 \
       -machine q35 \
       -bios "$ovmf" \
       -accel tcg,thread=single \
-      -cpu Skylake-Client \
+      -cpu Skylake-Client,-pcid,-tsc-deadline,-hle,-invpcid,-rtm,-xsave \
       -drive id=hd0,file="$target_img",format=raw,media=disk,snapshot=on \
       -m 256M \
       -display none \
