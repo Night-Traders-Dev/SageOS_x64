@@ -65,7 +65,7 @@ gen_live_image() {
     local btrfs_start=$((ESP_START_LBA + (LIVE_ESP_SIZE_MIB * 1024 * 1024 / 512)))
     local swap_start=$((btrfs_start + (LIVE_BTRFS_SIZE_MIB * 1024 * 1024 / 512)))
 
-    sgdisk --clear "$img" >/dev/null
+    sgdisk --clear "$img" >/dev/null 2>&1
     sgdisk \
       --new=1:${ESP_START_LBA}:+${LIVE_ESP_SIZE_MIB}M \
       --typecode=1:EF00 \
@@ -76,7 +76,7 @@ gen_live_image() {
       --new=3:${swap_start}:+${LIVE_SWAP_SIZE_MIB}M \
       --typecode=3:8200 \
       --change-name=3:"SageOS Swap" \
-      "$img" >/dev/null
+      "$img" >/dev/null 2>&1
 
     # Flash ESP
     dd if="$ESP" of="$img" bs=512 seek="$ESP_START_LBA" conv=notrunc status=none
@@ -103,7 +103,7 @@ gen_installer_image() {
     local btrfs_start=$((ESP_START_LBA + (INSTALLER_ESP_SIZE_MIB * 1024 * 1024 / 512)))
     local swap_start=$((btrfs_start + (INSTALLER_BTRFS_SIZE_MIB * 1024 * 1024 / 512)))
 
-    sgdisk --clear "$img" >/dev/null
+    sgdisk --clear "$img" >/dev/null 2>&1
     sgdisk \
       --new=1:${ESP_START_LBA}:+${INSTALLER_ESP_SIZE_MIB}M \
       --typecode=1:EF00 \
@@ -114,7 +114,7 @@ gen_installer_image() {
       --new=3:${swap_start}:+${INSTALLER_SWAP_SIZE_MIB}M \
       --typecode=3:8200 \
       --change-name=3:"SageOS Swap" \
-      "$img" >/dev/null
+      "$img" >/dev/null 2>&1
 
     # Flash ESP
     dd if="$ESP" of="$img" bs=512 seek="$ESP_START_LBA" conv=notrunc status=none
