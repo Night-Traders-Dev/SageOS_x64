@@ -38,6 +38,7 @@ typedef struct ata_request {
     uint16_t *buffer;
     int completed;
     int success;
+    struct thread *waiting_thread;
     struct ata_request *next;
 } ata_request_t;
 
@@ -176,6 +177,9 @@ static void ata_complete_request(int success) {
     if (ata_current_request) {
         ata_current_request->completed = 1;
         ata_current_request->success = success;
+        if (ata_current_request->waiting_thread) {
+            sched_unblock(ata_current_request->waiting_thread);
+        }
         ata_current_request = NULL;
     }
     ata_process_queue();
@@ -222,6 +226,7 @@ static ata_request_t *ata_create_request(ata_operation_t op, uint32_t lba, uint1
     req->buffer = buffer;
     req->completed = 0;
     req->success = 0;
+    req->waiting_thread = sched_current_thread();
     req->next = NULL;
 
     return req;
@@ -260,20 +265,10 @@ int ata_write_sector_async(uint32_t lba, const uint16_t *buffer) {
 }
 
 int ata_wait_completion(void) {
-    uint32_t timeout = ATA_WAIT_SPINS;
-
     if (!ata_present) return 0;
 
-    while ((ata_current_request || ata_request_queue) && timeout > 0) {
-        ata_poll_current_request();
-        if (!ata_current_request && !ata_request_queue) break;
-        cpu_pause();
-        timeout--;
-    }
-    if (timeout == 0) {
-        dmesg_log("ata: wait timed out");
-        if (ata_current_request) ata_complete_request(0);
-        return 0;
+    while (ata_current_request || ata_request_queue) {
+        sched_block();
     }
     return 1;
 }
