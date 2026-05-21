@@ -5,7 +5,28 @@
 #include "status.h"
 #include "timer.h"
 #include "scheduler.h"
+#include "bootinfo.h"
 #include <stdint.h>
+
+extern SageOSBootInfo *kernel_get_boot_info(void);
+
+typedef struct {
+    uint16_t ScanCode;
+    uint16_t UnicodeChar;
+} EfiKey;
+
+struct EfiSimpleTextInputProtocol;
+
+typedef uint64_t (__attribute__((ms_abi)) *EfiInputReadKey)(
+    struct EfiSimpleTextInputProtocol *This,
+    EfiKey *Key
+);
+
+typedef struct EfiSimpleTextInputProtocol {
+    void *Reset;
+    EfiInputReadKey ReadKeyStroke;
+    void *WaitForKey;
+} EfiSimpleTextInputProtocol;
 
 #define I8042_DATA    0x60
 #define I8042_STATUS  0x64
@@ -59,7 +80,10 @@ static int dequeue_scancode(uint8_t *sc) {
     return 1;
 }
 
+static int g_i8042_present = 1;
+
 static void flush_output(void) {
+    if (!g_i8042_present) return;
     for (int i = 0; i < 32; i++) {
         if (!(inb(I8042_STATUS) & I8042_OBF)) break;
         (void)inb(I8042_DATA);
@@ -67,6 +91,7 @@ static void flush_output(void) {
 }
 
 static void drain_controller(void) {
+    if (!g_i8042_present) return;
     for (int i = 0; i < 32; i++) {
         uint8_t status = inb(I8042_STATUS);
         if (!(status & I8042_OBF)) return;
@@ -76,8 +101,6 @@ static void drain_controller(void) {
     }
 }
 
-
-
 void keyboard_init(void) {
     scancode_head = 0;
     scancode_tail = 0;
@@ -86,7 +109,15 @@ void keyboard_init(void) {
     ctrl_down = 0;
     alt_down = 0;
     extended_prefix = 0;
-    flush_output();
+
+    // Detect if i8042 exists by reading status port.
+    // If it returns 0xFF, the port is floating (controller absent).
+    if (inb(I8042_STATUS) == 0xFF) {
+        g_i8042_present = 0;
+    } else {
+        g_i8042_present = 1;
+        flush_output();
+    }
 }
 
 void keyboard_irq(void) {
@@ -165,6 +196,34 @@ int keyboard_poll_event(KeyEvent *ev) {
 }
 
 int keyboard_poll_any_event(KeyEvent *ev) {
+    // 1. Check if firmware input mode is active (UEFI boot services active)
+    SageOSBootInfo *info = kernel_get_boot_info();
+    if (info && info->boot_services_active && info->con_in) {
+        EfiSimpleTextInputProtocol *con_in = (EfiSimpleTextInputProtocol *)info->con_in;
+        EfiKey key;
+        // Call ReadKeyStroke via MS ABI (returns 0 on success, 6/EFI_NOT_READY if no key)
+        uint64_t status = con_in->ReadKeyStroke(con_in, &key);
+        if (status == 0) { // EFI_SUCCESS
+            ev->pressed = 1;
+            ev->extended = 0;
+            if (key.UnicodeChar != 0) {
+                ev->ascii = (char)key.UnicodeChar;
+                if (ev->ascii == '\r') ev->ascii = '\n';
+                ev->scancode = 0;
+            } else {
+                ev->ascii = 0;
+                // Map UEFI arrow keys to standard scancodes
+                if (key.ScanCode == 1) ev->scancode = 0x48;      // UP
+                else if (key.ScanCode == 2) ev->scancode = 0x50; // DOWN
+                else if (key.ScanCode == 3) ev->scancode = 0x4D; // RIGHT
+                else if (key.ScanCode == 4) ev->scancode = 0x4B; // LEFT
+                else ev->scancode = 0;
+            }
+            return 1;
+        }
+        return 0;
+    }
+
     char serial_c;
     if (serial_poll_char(&serial_c)) {
         if (serial_c == 27) return parse_serial_escape(ev);
@@ -185,6 +244,13 @@ static int keyboard_poll_visible_event(KeyEvent *ev) {
 }
 
 const char *keyboard_backend(void) {
+    SageOSBootInfo *info = kernel_get_boot_info();
+    if (info && info->boot_services_active && info->con_in) {
+        return "UEFI-ConIn (firmware mode)";
+    }
+    if (!g_i8042_present) {
+        return "serial-only (i8042 absent)";
+    }
     return "i8042-irq+poll+serial";
 }
 

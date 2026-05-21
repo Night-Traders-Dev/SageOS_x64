@@ -54,6 +54,12 @@ static void shell_main_thread(void *arg) {
 }
 
 
+static SageOSBootInfo *g_boot_info = NULL;
+
+SageOSBootInfo *kernel_get_boot_info(void) {
+    return g_boot_info;
+}
+
 static int firmware_input_mode(SageOSBootInfo *info) {
     return
         info &&
@@ -64,6 +70,7 @@ static int firmware_input_mode(SageOSBootInfo *info) {
 }
 
 void kmain(SageOSBootInfo *info) {
+    g_boot_info = info;
     int firmware_input = firmware_input_mode(info);
 
     sage_kernel_early_init();
