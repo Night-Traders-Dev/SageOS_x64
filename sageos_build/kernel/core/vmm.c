@@ -1,6 +1,7 @@
 #include "vmm.h"
 #include "phys_alloc.h"
 #include <string.h>
+#include "io.h"
 
 #define ALIGN_DOWN(addr, size) ((addr) & ~((size) - 1))
 
@@ -9,6 +10,25 @@ static uint64_t *pml4;
 void vmm_init(void) {
     pml4 = (uint64_t*)phys_alloc();
     memset(pml4, 0, PAGE_SIZE);
+
+    // Identity-map the first 4GB of physical address space using 2MB huge pages (PS flag = bit 7)
+    uint64_t *pdpt = (uint64_t*)phys_alloc();
+    memset(pdpt, 0, PAGE_SIZE);
+    pml4[0] = (uint64_t)pdpt | PAGE_PRESENT | PAGE_WRITABLE;
+
+    for (uint64_t gb = 0; gb < 4; gb++) {
+        uint64_t *pd = (uint64_t*)phys_alloc();
+        memset(pd, 0, PAGE_SIZE);
+        pdpt[gb] = (uint64_t)pd | PAGE_PRESENT | PAGE_WRITABLE;
+
+        for (uint64_t entry = 0; entry < 512; entry++) {
+            uint64_t paddr = (gb * 1024 * 1024 * 1024ULL) + (entry * 2 * 1024 * 1024ULL);
+            pd[entry] = paddr | PAGE_PRESENT | PAGE_WRITABLE | (1ULL << 7);
+        }
+    }
+
+    // Load standard CR3 page table root
+    write_cr3((uint64_t)pml4);
 }
 
 void vmm_map(uint64_t vaddr, uint64_t paddr, uint64_t flags) {
