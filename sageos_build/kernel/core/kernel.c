@@ -71,13 +71,11 @@ void kmain(SageOSBootInfo *info) {
     phys_init(info);
     vmm_init();
 
-    metal_vm_call(&g_repl_vm, "bootlog_init_driver", NULL, 0);
+    serial_init();
+    console_init(info);
+    bootlog_init(info);
     bootlog("[KRN] kmain entered\r\n");
-
-    metal_vm_call(&g_repl_vm, "init_serial", NULL, 0);
     bootlog("[KRN] serial_init OK\r\n");
-
-    metal_vm_call(&g_repl_vm, "init_console", NULL, 0);
     bootlog("[KRN] console_init OK\r\n");
 
     dmesg_log("SageOS modular kernel starting...");
@@ -88,18 +86,18 @@ void kmain(SageOSBootInfo *info) {
         : "[KRN] mode: native (boot services exited)\r\n");
 
     bootlog("[KRN] acpi_init: start\r\n");
-    metal_vm_call(&g_repl_vm, "init_acpi", NULL, 0);
+    acpi_init(info);
     dmesg_log("ACPI initialized");
     bootlog("[KRN] acpi_init: OK\r\n");
 
     if (!firmware_input) {
         bootlog("[KRN] smp_init: start\r\n");
-        metal_vm_call(&g_repl_vm, "init_smp", NULL, 0);
+        smp_init();
         dmesg_log("SMP initialized");
         bootlog("[KRN] smp_init: OK\r\n");
     } else {
         bootlog("[KRN] smp_init_firmware_bsp: start\r\n");
-        metal_vm_call(&g_repl_vm, "init_smp_firmware", NULL, 0);
+        smp_init_firmware_bsp();
         dmesg_log("SMP initialized (firmware input mode)");
         bootlog("[KRN] smp_init_firmware_bsp: OK\r\n");
     }
@@ -112,17 +110,17 @@ void kmain(SageOSBootInfo *info) {
 
     if (!firmware_input) {
         bootlog("[KRN] idt_init: start\r\n");
-        metal_vm_call(&g_repl_vm, "init_idt", NULL, 0);
+        idt_init();
         dmesg_log("IDT initialized");
         bootlog("[KRN] idt_init: OK\r\n");
 
         bootlog("[KRN] ata_init: start\r\n");
-        metal_vm_call(&g_repl_vm, "init_ata", NULL, 0);
+        ata_init();
         dmesg_log("ATA initialized");
         bootlog("[KRN] ata_init: OK\r\n");
 
         bootlog("[KRN] irq_enable\r\n");
-        metal_vm_call(&g_repl_vm, "enable_irq", NULL, 0);
+        irq_enable();
     } else {
         dmesg_log("skipping IDT/IRQ initialization (firmware input mode)");
         bootlog("[KRN] skipping IDT/IRQ (firmware input mode)\r\n");
