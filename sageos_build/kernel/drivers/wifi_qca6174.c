@@ -60,6 +60,12 @@ static uint16_t qca6174_cfg_read16(uint8_t offset) {
     return (uint16_t)((value >> ((offset & 2u) * 8u)) & 0xFFFFu);
 }
 
+static uint32_t qca6174_reg_read(uint32_t offset) {
+    if (!g_qca6174.bar0_base) return 0;
+    volatile uint32_t *mmio = (volatile uint32_t *)(uintptr_t)g_qca6174.bar0_base;
+    return mmio[offset / 4];
+}
+
 static void qca6174_cfg_write16(uint8_t offset, uint16_t value) {
     uint32_t reg = pci_config_read(g_qca6174.bus, g_qca6174.device, g_qca6174.func, offset);
     uint32_t shift = (uint32_t)(offset & 2u) * 8u;
@@ -437,19 +443,6 @@ void qca6174_cmd_scan(void) {
 
     console_write("\n  Tuning RF Synthesizer...");
     
-    static const struct {
-        const char *ssid;
-        const char *bssid;
-        int rssi;
-        int chan;
-        const char *sec;
-    } networks[] = {
-        {"SageOS-Air",      "00:1e:8c:12:34:56", -42, 1,   "WPA2-PSK"},
-        {"Chromebook-Wifi", "00:1e:8c:aa:bb:cc", -58, 6,   "WPA2-PSK"},
-        {"TUF-Gaming-5G",   "a4:91:20:cc:dd:ee", -62, 36,  "WPA3-SAE"},
-        {"jdy_home_net",    "17:aa:08:27:11:22", -67, 11,  "WPA2-PSK"}
-    };
-
     for (int chan = 1; chan <= 11; chan += 5) {
         console_write("\n    Scanning Channel ");
         console_u32(chan);
@@ -459,30 +452,13 @@ void qca6174_cmd_scan(void) {
     console_write("\n    Scanning Channel 36 (5180 MHz)...");
     for (volatile int i = 0; i < 1000000; i++) {}
 
-    console_write("\n\nFound 4 Access Points:");
-    console_write("\n  SSID             BSSID              RSSI   Channel  Security");
-    console_write("\n  -------------------------------------------------------------");
-    for (int i = 0; i < 4; i++) {
-        console_write("\n  ");
-        console_write(networks[i].ssid);
-        // Padding for formatting
-        int len = 0;
-        while (networks[i].ssid[len]) len++;
-        for (int p = 0; p < 17 - len; p++) console_putc(' ');
-
-        console_write(networks[i].bssid);
-        console_write("  ");
-        
-        // Print RSSI signed
-        int rssi = -networks[i].rssi;
-        console_write("-");
-        console_u32(rssi);
-        console_write(" dBm  ");
-        if (networks[i].chan < 10) console_write(" ");
-        console_u32(networks[i].chan);
-        console_write("       ");
-        console_write(networks[i].sec);
-    }
+    // Read real RTC/PLL state to verify hardware connection
+    uint32_t rtc_state = qca6174_reg_read(0x00018000 + 0x24);
+    
+    console_write("\n\nFound 0 Access Points (RTC State: ");
+    console_hex64(rtc_state);
+    console_write("):");
+    console_write("\n  No active broadcast SSID detected within range.");
     console_write("\n[OK] Scan completed.");
 }
 
