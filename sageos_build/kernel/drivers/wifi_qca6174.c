@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "console.h"
 #include "dmesg.h"
+#include "fat32.h"
 #include "net.h"
 #include "pci.h"
 #include "vfs.h"
@@ -495,13 +496,20 @@ static void qca6174_save_wifi_cfg(const char *ssid, const char *pass) {
     cfg[pos++] = '\n';
     cfg[pos] = 0;
 
-    vfs_create(WIFI_CFG_PATH);
-    int r = vfs_write(WIFI_CFG_PATH, 0, cfg, (size_t)pos);
+    /*
+     * Use fat32_uefi_write() directly to bypass the SageLang VFS bridge
+     * which intercepts vfs_write() and may not forward it to the backend.
+     * The path is relative to the ESP root (no /fat32/ prefix).
+     */
+    int r = fat32_uefi_write("WIFI.CFG", cfg, (size_t)pos);
     if (r > 0) {
         console_write("\n  [OK] Credentials saved to /fat32/WIFI.CFG");
         dmesg_log("wifi: credentials saved to /fat32/WIFI.CFG");
     } else {
-        console_write("\n  Warning: could not save credentials (FAT32 not writable?)");
+        console_write("\n  Warning: could not save credentials (write returned ");
+        console_u32((uint32_t)(-r));
+        console_write(")");
+        dmesg_log("wifi: failed to save credentials to FAT32");
     }
 }
 
@@ -574,9 +582,9 @@ void qca6174_cmd_connect(const char *ssid, const char *pass) {
 }
 
 void qca6174_auto_connect(void) {
-    /* Read saved credentials from /fat32/WIFI.CFG */
+    /* Read saved credentials directly from FAT32, bypassing the VFS bridge */
     char cfg[160];
-    int n = vfs_read(WIFI_CFG_PATH, 0, cfg, sizeof(cfg) - 1);
+    int n = fat32_read("WIFI.CFG", 0, cfg, sizeof(cfg) - 1);
     if (n <= 0) return;
     cfg[n] = 0;
 

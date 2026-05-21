@@ -32,4 +32,10 @@ int fat32_stat(const char *path, VfsStat *out);
 int fat32_readdir(const char *path, VfsDirEntry *entries, int max_entries);
 int fat32_read(const char *path, uint64_t offset, void *buffer, size_t size);
 
+/*
+ * Direct UEFI write — bypasses the VFS/SageLang bridge.
+ * rel_path is relative to the ESP root (no leading /fat32/).
+ */
+int fat32_uefi_write(const char *rel_path, const void *buffer, size_t size);
+
 #endif

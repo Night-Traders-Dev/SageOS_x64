@@ -881,3 +881,53 @@ VfsBackend *fat32_get_backend(void) {
     return &g_fat32_backend;
 }
 
+/*
+ * fat32_uefi_write — write directly via UEFI EFI_FILE_PROTOCOL,
+ * bypassing the VFS/SageLang bridge.  Used by subsystems (e.g. wifi
+ * credential persistence) that need to write to the FAT32 ESP while
+ * the SageLang VFS VM is active and might intercept vfs_write().
+ *
+ * rel_path: path relative to the ESP root (e.g. "WIFI.CFG")
+ * Returns bytes written, or < 0 on error.
+ */
+int fat32_uefi_write(const char *rel_path, const void *buffer, size_t size) {
+    SageOSBootInfo *info = kernel_get_boot_info();
+    if (!info || !info->boot_services_active || !info->root_dir) {
+        /* Fallback: native ATA-based write */
+        return fat32_write(rel_path, 0, buffer, size);
+    }
+
+    EfiFileProtocol *root = (EfiFileProtocol *)info->root_dir;
+    uint16_t wpath[256];
+    ascii_to_utf16_path(rel_path, wpath, 256);
+
+    EfiFileProtocol *file = NULL;
+
+    /* Try open for write (file must exist) */
+    uint64_t status = root->Open(root, &file, wpath,
+                                 3ULL /* EFI_FILE_MODE_READ | WRITE */, 0);
+    if (status != 0) {
+        /* Create the file */
+        status = root->Open(root, &file, wpath,
+                            0x8000000000000003ULL /* CREATE | READ | WRITE */,
+                            0 /* normal file */);
+        if (status != 0) return -5; /* EIO */
+    }
+
+    /* Seek to beginning (overwrite) */
+    if (file->SetPosition) file->SetPosition(file, 0);
+
+    uint64_t write_len = size;
+    status = file->Write(file, &write_len, buffer);
+
+    /* Flush to ensure FAT32 directory entries are committed */
+    if (file->Flush) {
+        typedef uint64_t (__attribute__((ms_abi)) *EfiFlushFn)(EfiFileProtocol *);
+        ((EfiFlushFn)file->Flush)(file);
+    }
+
+    file->Close(file);
+
+    if (status != 0) return -5;
+    return (int)write_len;
+}
