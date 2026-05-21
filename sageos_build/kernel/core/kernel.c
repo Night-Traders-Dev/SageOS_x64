@@ -99,13 +99,13 @@ void kmain(SageOSBootInfo *info) {
         bootlog("[KRN] smp_init_firmware_bsp: OK\r\n");
     }
 
-    if (!firmware_input) {
-        bootlog("[KRN] timer_init: start\r\n");
-        extern void timer_init(void);
-        timer_init();
-        dmesg_log("timer initialized");
-        bootlog("[KRN] timer_init: OK\r\n");
+    bootlog("[KRN] timer_init: start\r\n");
+    extern void timer_init(void);
+    timer_init();
+    dmesg_log("timer initialized");
+    bootlog("[KRN] timer_init: OK\r\n");
 
+    if (!firmware_input) {
         bootlog("[KRN] idt_init: start\r\n");
         metal_vm_call(&g_repl_vm, "init_idt", NULL, 0);
         dmesg_log("IDT initialized");
@@ -119,8 +119,8 @@ void kmain(SageOSBootInfo *info) {
         bootlog("[KRN] irq_enable\r\n");
         metal_vm_call(&g_repl_vm, "enable_irq", NULL, 0);
     } else {
-        dmesg_log("skipping IDT/timer initialization (firmware input mode)");
-        bootlog("[KRN] skipping IDT/timer/IRQ (firmware input mode)\r\n");
+        dmesg_log("skipping IDT/IRQ initialization (firmware input mode)");
+        bootlog("[KRN] skipping IDT/IRQ (firmware input mode)\r\n");
 
         bootlog("[KRN] ata_init (polling): start\r\n");
         ata_init();
