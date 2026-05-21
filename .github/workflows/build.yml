@@ -60,7 +60,8 @@ jobs:
           name: sageos-${{ github.sha }}
           retention-days: 7
           path: |
-            sageos.img
+            sageos-live.img
+            sageos-installer.img
             sageos_build/BOOTX64.EFI
             sageos_build/KERNEL.BIN
             sageos_build/kernel.elf
@@ -101,7 +102,7 @@ jobs:
           timeout 60s qemu-system-x86_64 \
             -bios "$OVMF" \
             -cpu Skylake-Client \
-            -drive id=hd0,file=sageos.img,format=raw,media=disk,snapshot=on \
+            -drive id=hd0,file=sageos-live.img,format=raw,media=disk,snapshot=on \
             -m 256M \
             -nographic \
             -monitor none \
