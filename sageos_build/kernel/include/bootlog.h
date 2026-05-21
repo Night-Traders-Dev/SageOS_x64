@@ -18,7 +18,7 @@
  *   bootlog_close();              // optional: flush before scheduler
  */
 
-void bootlog_init(SageOSBootInfo *info);
+void bootlog_init(void *unused_info);
 void bootlog(const char *msg);
 void bootlog_hex(const char *label, uint64_t value);
 void bootlog_close(void);
