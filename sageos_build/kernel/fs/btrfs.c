@@ -26,29 +26,24 @@ static int btrfs_read_sector(uint32_t lba, uint8_t *buffer) {
 }
 
 int btrfs_init(void) {
-    uint8_t buffer[512];
+    uint8_t buffer[sizeof(btrfs_super_block)];
     
     if (!ata_is_available()) {
         btrfs_available = 0;
         return 0;
     }
 
-    /* BTRFS Superblock is at 64KiB (offset 128 sectors) */
     uint32_t super_lba = BTRFS_PARTITION_START_LBA + (BTRFS_SUPER_INFO_OFFSET / 512);
     
-    if (!btrfs_read_sector(super_lba, buffer)) {
-        btrfs_available = 0;
-        return 0;
+    /* BTRFS superblock spans 4 sectors (2048 bytes) */
+    for (int i = 0; i < (int)(sizeof(btrfs_super_block) / 512); i++) {
+        if (!btrfs_read_sector(super_lba + i, buffer + (i * 512))) {
+            btrfs_available = 0;
+            return 0;
+        }
     }
 
-    /* We need to read more than one sector for the full superblock (2048 bytes + reserved) 
-       But the magic is in the first 1KB. */
     btrfs_super_block *sb = (btrfs_super_block *)buffer;
-    
-    /* Re-read to get the full SB if needed, but let's check magic first.
-       Actually btrfs_super_block magic is at offset 0x40 from start of SB.
-       SB starts at 0x10000. Magic at 0x10040.
-    */
     
     if (sb->magic == BTRFS_MAGIC) {
         btrfs_available = 1;
