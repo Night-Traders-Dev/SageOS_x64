@@ -333,7 +333,7 @@ STUBEOF
 
     echo "--- Creating ESP FAT32 image ---"
     dd if=/dev/zero of="$ESP" bs=1M count="$INSTALLER_ESP_SIZE_MIB" status=none
-    mkfs.fat -F 32 -n SAGEOS "$ESP" >/dev/null
+    mkfs.fat -F 32 -n SAGEOS "$ESP" >/dev/null 2>&1
 
     mmd -i "$ESP" ::/EFI
     mmd -i "$ESP" ::/EFI/BOOT
