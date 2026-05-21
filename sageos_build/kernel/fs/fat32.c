@@ -39,7 +39,6 @@ typedef struct {
     char fs_type[8];
 } __attribute__((packed)) FAT32_BPB;
 
-/* FAT32 FSInfo sector layout (offset within the sector) */
 typedef struct {
     uint32_t lead_sig;          /* 0x41615252 */
     uint8_t  reserved1[480];
@@ -49,6 +48,12 @@ typedef struct {
     uint8_t  reserved2[12];
     uint32_t trail_sig;         /* 0xAA550000 */
 } __attribute__((packed)) FAT32_FSInfo;
+
+static int fat32_is_end_of_chain(uint32_t entry) {
+    return entry >= 0x0FFFFFF8;
+}
+
+#define fat32_next_cluster fat32_read_fat_entry
 
 typedef struct {
     char name[8];
@@ -116,7 +121,7 @@ static int streq(const char *a, const char *b) {
     return *a == 0 && *b == 0;
 }
 
-static uint32_t fat32_next_cluster(uint32_t cluster) {
+static uint32_t fat32_read_fat_entry(uint32_t cluster) {
     uint8_t sector[512];
     uint32_t fat_offset = cluster * 4;
     uint32_t lba = FAT32_PARTITION_START_LBA + fat32_reserved_sectors + (fat_offset / 512);
@@ -127,8 +132,59 @@ static uint32_t fat32_next_cluster(uint32_t cluster) {
     return entry & 0x0FFFFFFF;
 }
 
-static int fat32_is_end_of_chain(uint32_t entry) {
-    return entry >= 0x0FFFFFF8;
+static int fat32_write_fat_entry(uint32_t cluster, uint32_t value) {
+    uint8_t sector[512];
+    uint32_t fat_offset = cluster * 4;
+    uint32_t lba = FAT32_PARTITION_START_LBA + fat32_reserved_sectors + (fat_offset / 512);
+    uint32_t index = fat_offset % 512;
+
+    if (!fat32_read_sector(lba, sector)) return 0;
+    uint32_t entry = *(uint32_t *)&sector[index];
+    entry = (entry & 0xF0000000) | (value & 0x0FFFFFFF);
+    *(uint32_t *)&sector[index] = entry;
+
+    return ata_write_sector(lba, (uint16_t *)sector);
+}
+
+static uint32_t fat32_find_free_cluster(void) {
+    /* Simple linear scan from cluster 2 */
+    for (uint32_t cluster = 2; cluster < (fat32_fat_size * 512 / 4); cluster++) {
+        if (fat32_read_fat_entry(cluster) == 0) {
+            return cluster;
+        }
+    }
+    return 0;
+}
+
+static int fat32_update_directory_entry(uint32_t cluster, const char *name, FAT32_DirEntry *new_entry) {
+    uint8_t sector[512];
+
+    while (!fat32_is_end_of_chain(cluster)) {
+        for (uint32_t sector_idx = 0; sector_idx < fat32_sectors_per_cluster; sector_idx++) {
+            uint32_t lba = fat32_cluster_to_lba(cluster) + sector_idx;
+            fat32_read_sector(lba, sector);
+
+            for (uint32_t offset = 0; offset < 512; offset += FAT32_ENTRY_SIZE) {
+                FAT32_DirEntry *entry = (FAT32_DirEntry *)(sector + offset);
+                
+                char entry_name[13];
+                size_t len = 0;
+                for (size_t i = 0; i < 8 && entry->name[i] != ' '; i++) entry_name[len++] = entry->name[i];
+                if (entry->ext[0] != ' ') {
+                    entry_name[len++] = '.';
+                    for (size_t i = 0; i < 3 && entry->ext[i] != ' '; i++) entry_name[len++] = entry->ext[i];
+                }
+                entry_name[len] = 0;
+
+                if (len > 0 && streq(entry_name, name)) {
+                    *entry = *new_entry;
+                    return ata_write_sector(lba, (uint16_t *)sector);
+                }
+            }
+        }
+        cluster = fat32_next_cluster(cluster);
+    }
+    return 0;
 }
 
 static int fat32_find_entry_in_cluster(uint32_t cluster, const char *name, FAT32_DirEntry *out_entry) {
@@ -553,6 +609,74 @@ int fat32_read(const char *path, uint64_t offset, void *buffer, size_t size) {
     return (int)bytes_read;
 }
 
+int fat32_write(const char *path, uint64_t offset, const void *buffer, size_t size) {
+    if (!fat32_available) return VFS_EIO;
+
+    FAT32_DirEntry entry;
+    if (!fat32_find_root_entry(path, &entry)) return VFS_ENOENT;
+    if (entry.attr & FAT32_ATTR_DIRECTORY) return VFS_EISDIR;
+
+    uint32_t cluster = ((uint32_t)entry.first_cluster_hi << 16) | entry.first_cluster_lo;
+    uint32_t cluster_bytes = (uint32_t)fat32_sectors_per_cluster * 512;
+    uint64_t write_end = offset + size;
+
+    /* Expand clusters if necessary */
+    uint32_t current_cluster = cluster;
+    while (write_end > (uint64_t)cluster_bytes) {
+        uint32_t next = fat32_next_cluster(current_cluster);
+        if (fat32_is_end_of_chain(next)) {
+            uint32_t new_cluster = fat32_find_free_cluster();
+            if (!new_cluster) return VFS_ENOSPC;
+            fat32_write_fat_entry(current_cluster, new_cluster);
+            fat32_write_fat_entry(new_cluster, 0x0FFFFFFF);
+            next = new_cluster;
+        }
+        current_cluster = next;
+        write_end -= cluster_bytes;
+    }
+
+    /* Perform write */
+    uint8_t sector[512];
+    const uint8_t *in = (const uint8_t *)buffer;
+    size_t bytes_written = 0;
+    current_cluster = cluster;
+    uint64_t skip = offset;
+
+    while (bytes_written < size && !fat32_is_end_of_chain(current_cluster)) {
+        for (uint32_t sector_idx = 0;
+             sector_idx < fat32_sectors_per_cluster && bytes_written < size;
+             sector_idx++) {
+            uint32_t lba = fat32_cluster_to_lba(current_cluster) + sector_idx;
+            uint32_t sector_offset = 0;
+
+            if (skip >= 512) {
+                skip -= 512;
+                continue;
+            }
+            sector_offset = (uint32_t)skip;
+            skip = 0;
+
+            if (sector_offset != 0 || (size - bytes_written) < 512) {
+                fat32_read_sector(lba, sector);
+            }
+
+            uint32_t to_copy = 512 - sector_offset;
+            if (to_copy > size - bytes_written) to_copy = (uint32_t)(size - bytes_written);
+
+            for (uint32_t i = 0; i < to_copy; i++) sector[sector_offset + i] = in[bytes_written++];
+            ata_write_sector(lba, (uint16_t *)sector);
+        }
+        current_cluster = fat32_next_cluster(current_cluster);
+    }
+
+    if (offset + size > entry.file_size) {
+        entry.file_size = (uint32_t)(offset + size);
+        fat32_update_directory_entry(fat32_root_cluster, path, &entry);
+    }
+
+    return (int)bytes_written;
+}
+
 /* -----------------------------------------------------------------------
  * VFS Backend adapter
  * ----------------------------------------------------------------------- */
@@ -574,12 +698,18 @@ static int fat32_be_read(VfsBackend *self, const char *rel_path,
     return fat32_read(rel_path, offset, buffer, size);
 }
 
+static int fat32_be_write(VfsBackend *self, const char *rel_path,
+                          uint64_t offset, const void *buffer, size_t size) {
+    (void)self;
+    return fat32_write(rel_path, offset, buffer, size);
+}
+
 static VfsBackend g_fat32_backend = {
     .name    = "fat32",
     .stat    = fat32_be_stat,
     .readdir = fat32_be_readdir,
     .read    = fat32_be_read,
-    .write   = NULL,     /* read-only */
+    .write   = fat32_be_write,
     .mkdir   = NULL,
     .create  = NULL,
     .unlink  = NULL,
