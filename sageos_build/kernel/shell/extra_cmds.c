@@ -582,7 +582,7 @@ void cmd_btop(void) {
                     break; /* immediate refresh */
                 }
             }
-            timer_delay_ms(25); /* 20 × 25 ms = ~500 ms between refreshes */
+            sched_sleep(25); /* 20 × 25 ms = ~500 ms between refreshes */
             timer_poll();       /* keep tick counter advancing */
         }
     }

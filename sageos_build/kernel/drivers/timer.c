@@ -86,6 +86,7 @@ static void timer_update_cpu_percent(void) {
 void timer_irq(void) {
     ticks++;
     timer_update_cpu_percent();
+    sched_timer_tick();
     // Direct call into SageLang timer_irq
     metal_vm_call(&g_repl_vm, "timer_irq", NULL, 0);
 }
@@ -140,7 +141,7 @@ void timer_delay_ms(uint32_t ms) {
     uint64_t end = start + (ms * PIT_HZ) / 1000;
     if (end == start && ms > 0) end++;
     while (ticks < end) {
-        cpu_pause();
+        sched_yield();
     }
 }
 

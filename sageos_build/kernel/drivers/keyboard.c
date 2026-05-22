@@ -260,7 +260,8 @@ int keyboard_wait_event(KeyEvent *ev) {
         status_tick_poll();
         timer_poll();
         cpu_pause();
-        sched_yield();
+        /* Use sleep instead of yield to allow idle thread to run */
+        sched_sleep(10);
     }
 }
 
