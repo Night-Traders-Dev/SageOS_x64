@@ -823,7 +823,7 @@ static int sage_repl_build_function(void* data, ProcStmt* proc,
     return 1;
 }
 
-void sage_repl_step(const char* line) {
+static void sage_repl_step_internal(const char* line, int interactive) {
     char error[256];
     
     if (!line || !*line) return;
@@ -858,7 +858,7 @@ void sage_repl_step(const char* line) {
             break;
         }
 
-        if (is_expression &&
+        if (interactive && is_expression &&
             !sage_wrap_expression_for_print(&chunk, error, sizeof(error))) {
             printf("Compile error: %s\n", error);
             bytecode_chunk_free(&chunk);
@@ -887,6 +887,10 @@ void sage_repl_step(const char* line) {
         bytecode_chunk_free(&chunk);
     }
     sage_clear_exit_state();
+}
+
+void sage_repl_step(const char* line) {
+    sage_repl_step_internal(line, 1);
 }
 
 static int command_matches(const char* line, const char* cmd, const char** arg_out) {
@@ -1306,5 +1310,5 @@ void sage_execute(const char* line) {
     }
 
     console_putc('\n');
-    sage_repl_step(line);
+    sage_repl_step_internal(line, 0);
 }
