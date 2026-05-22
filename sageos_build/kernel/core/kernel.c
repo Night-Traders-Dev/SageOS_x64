@@ -262,7 +262,7 @@ void kmain(SageOSBootInfo *info) {
     bootlog("[KRN] creating shell thread\r\n");
 
     sched_create_thread("shell-main", shell_main_thread, NULL, THREAD_PRIORITY_NORMAL);
-    sched_create_thread("net-stack", net_stack_thread, NULL, THREAD_PRIORITY_HIGH);
+    sched_create_thread("net-stack", net_stack_thread, NULL, THREAD_PRIORITY_NORMAL);
 
     bootlog("[KRN] sched_start - log ends here\r\n");
     bootlog_close();
