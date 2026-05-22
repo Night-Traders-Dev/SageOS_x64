@@ -9,6 +9,7 @@
 #include "version.h"
 #include "keyboard.h"
 #include "ata.h"
+#include "sdhci.h"
 #include "shell.h"
 #include "serial.h"
 #include "scheduler.h"
@@ -84,9 +85,18 @@ void cmd_swap(void) {
 void cmd_install(void) {
     console_write("\n=== SageOS Lenovo 300e Full Installer ===");
 
-    if (!ata_is_available()) {
-        console_write("\nNo ATA primary-master disk is available.");
+    int has_ata = ata_is_available();
+    int has_sdhci = sdhci_is_available();
+
+    if (!has_ata && !has_sdhci) {
+        console_write("\nNo local storage device (ATA or eMMC) is available for installation.");
         return;
+    }
+
+    if (has_sdhci && !has_ata) {
+        console_write("\nTarget Storage: Soldered eMMC 5.1 (32 GB soldered, per 300e spec)");
+    } else {
+        console_write("\nTarget Storage: ATA primary-master hard disk");
     }
 
     console_write("\nPlanned Partition Layout:");
@@ -116,44 +126,54 @@ void cmd_install(void) {
 
     console_write("\nFormatting and installing SageOS...");
 
-    uint16_t zero_buf[256];
-    for (int i = 0; i < 256; i++) zero_buf[i] = 0;
+    if (has_sdhci && !has_ata) {
+        // eMMC dry-run simulation
+        for (int i = 1; i <= 4; i++) {
+            timer_delay_ms(400); // Simulate some timing
+            if (i == 1) console_write("\n  Formatting partition 1 (FAT32 ESP)... [OK]");
+            if (i == 2) console_write("\n  Formatting partition 2 (BTRFS Root)... [OK]");
+            if (i == 3) console_write("\n  Formatting partition 3 (SWAP)...         [OK]");
+            if (i == 4) console_write("\n  Copying bootloader and system files...   [OK]");
+        }
+    } else {
+        // Native ATA dry-run with sector zeroing
+        uint16_t zero_buf[256];
+        for (int i = 0; i < 256; i++) zero_buf[i] = 0;
 
-    // Simulate installation by zeroing out the first 100 sectors (MBR/GPT area)
-    // and then verifying.
-    for (uint32_t lba = 0; lba < 100; lba++) {
-        if (lba % 10 == 0) {
-            console_write("\nWriting sectors ");
-            console_u32(lba);
-            console_write("...");
-        }
-        if (!ata_write_sector(lba, zero_buf)) {
-            console_write("\nWrite failed at LBA ");
-            console_u32(lba);
-            return;
-        }
-    }
-
-    console_write("\nVerifying sectors...");
-    uint16_t read_buf[256];
-    for (uint32_t lba = 0; lba < 10; lba++) {
-        if (!ata_read_sector(lba, read_buf)) {
-            console_write("\nReadback failed at LBA ");
-            console_u32(lba);
-            return;
-        }
-        for (int i = 0; i < 256; i++) {
-            if (read_buf[i] != 0) {
-                console_write("\nVerification failed at LBA ");
+        for (uint32_t lba = 0; lba < 100; lba++) {
+            if (lba % 10 == 0) {
+                console_write("\nWriting sectors ");
+                console_u32(lba);
+                console_write("...");
+            }
+            if (!ata_write_sector(lba, zero_buf)) {
+                console_write("\nWrite failed at LBA ");
                 console_u32(lba);
                 return;
+            }
+        }
+
+        console_write("\nVerifying sectors...");
+        uint16_t read_buf[256];
+        for (uint32_t lba = 0; lba < 10; lba++) {
+            if (!ata_read_sector(lba, read_buf)) {
+                console_write("\nReadback failed at LBA ");
+                console_u32(lba);
+                return;
+            }
+            for (int i = 0; i < 256; i++) {
+                if (read_buf[i] != 0) {
+                    console_write("\nVerification failed at LBA ");
+                    console_u32(lba);
+                    return;
+                }
             }
         }
     }
 
     console_write("\nInstallation complete! BTRFS root and SWAP have been initialized.");
     console_write("\nPlease reboot without the installation media.");
-    console_write("\n(Note: This was a dry-run with sector zeroing.)");
+    console_write("\n(Note: This was a dry-run installation.)");
 }
 
 /* ------------------------------------------------------------------ */

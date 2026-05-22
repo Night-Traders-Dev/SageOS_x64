@@ -123,3 +123,7 @@ void sdhci_cmd_info(void) {
 
     console_write("\n  Storage type: eMMC 5.1 (32 GB soldered, per 300e spec)");
 }
+
+int sdhci_is_available(void) {
+    return sdhci_found;
+}

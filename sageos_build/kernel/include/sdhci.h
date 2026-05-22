@@ -18,4 +18,7 @@ int sdhci_init(void);
 /* Shell command: print SDHCI / eMMC controller info */
 void sdhci_cmd_info(void);
 
+/* Check if an SDHCI / eMMC controller is present */
+int sdhci_is_available(void);
+
 #endif /* SAGEOS_SDHCI_H */
