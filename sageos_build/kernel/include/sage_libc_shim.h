@@ -21,11 +21,11 @@ void  sage_free(void *p);
 char *sage_strdup(const char *s);
 
 /* Memory allocation */
-#define malloc(s)        sage_malloc(s)
-#define free(p)          sage_free(p)
-#define realloc(p,s)     sage_realloc(p, s)
-#define calloc(n,s)      sage_calloc(n, s)
-#define strdup(s)        sage_strdup(s)
+#define malloc        sage_malloc
+#define free          sage_free
+#define realloc       sage_realloc
+#define calloc        sage_calloc
+#define strdup        sage_strdup
 
 /* String functions */
 size_t sage_strlen(const char *s);
@@ -37,14 +37,14 @@ char  *sage_strncpy(char *dest, const char *src, size_t n);
 char  *sage_strchr(const char *s, int c);
 char  *sage_strstr(const char *h, const char *n);
 
-#define strlen(s)        sage_strlen(s)
-#define strcmp(a,b)       sage_strcmp(a,b)
-#define strncmp(a,b,n)   sage_strncmp(a,b,n)
-#define strcpy(d,s)      sage_strcpy(d,s)
-#define strcat(d,s)      sage_strcat(d,s)
-#define strncpy(d,s,n)   sage_strncpy(d,s,n)
-#define strchr(s,c)      sage_strchr(s,c)
-#define strstr(h,n)      sage_strstr(h,n)
+#define strlen        sage_strlen
+#define strcmp        sage_strcmp
+#define strncmp       sage_strncmp
+#define strcpy        sage_strcpy
+#define strcat        sage_strcat
+#define strncpy       sage_strncpy
+#define strchr        sage_strchr
+#define strstr        sage_strstr
 
 /* Memory ops */
 void *sage_memset(void *s, int c, size_t n);
@@ -52,13 +52,13 @@ void *sage_memcpy(void *d, const void *s, size_t n);
 void *sage_memmove(void *d, const void *s, size_t n);
 int   sage_memcmp(const void *a, const void *b, size_t n);
 
-#define memset(d,c,n)    sage_memset(d,c,n)
-#define memcpy(d,s,n)    sage_memcpy(d,s,n)
-#define memmove(d,s,n)   sage_memmove(d,s,n)
-#define memcmp(a,b,n)    sage_memcmp(a,b,n)
+#define memset        sage_memset
+#define memcpy        sage_memcpy
+#define memmove       sage_memmove
+#define memcmp        sage_memcmp
 
 /* I/O — printf family */
-void sage_printf(const char *fmt, ...);
+int  sage_printf(const char *fmt, ...);
 int  sage_snprintf(char *buf, size_t n, const char *fmt, ...);
 
 #define printf(...)       sage_printf(__VA_ARGS__)
@@ -110,6 +110,14 @@ int    sage_isspace(int c);
 #define _MATH_H 1
 #define _CTYPE_H 1
 #define _SETJMP_H 1
+#define _ASSERT_H 1
+#define _TIME_H 1
+#define _FEATURES_H 1
+#define _SYS_TYPES_H 1
+#define _INTTYPES_H 1
+
+typedef uint64_t time_t;
+typedef uint64_t clock_t;
 
 /* Stub jmp_buf for repl.h — no real longjmp in kernel */
 typedef int jmp_buf[1];

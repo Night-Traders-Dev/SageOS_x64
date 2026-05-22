@@ -163,7 +163,7 @@ static void put_uint(uint64_t v) {
     console_write(&buf[pos]);
 }
 
-void sage_printf(const char *fmt, ...) {
+int sage_printf(const char *fmt, ...) {
     __builtin_va_list ap;
     __builtin_va_start(ap, fmt);
     while (*fmt) {
@@ -182,6 +182,7 @@ void sage_printf(const char *fmt, ...) {
     }
 done:
     __builtin_va_end(ap);
+    return 0;
 }
 
 int sage_snprintf(char *buf, size_t n, const char *fmt, ...) {

@@ -198,7 +198,9 @@ void kmain(SageOSBootInfo *info) {
     net_init();
     extern void lwip_port_init(void);
     lwip_port_init();
-    dmesg_log("network subsystem initialized (lwIP active)");
+    extern void mbedtls_port_init(void);
+    mbedtls_port_init();
+    dmesg_log("network subsystem initialized (lwIP + MbedTLS active)");
     bootlog("[KRN] net_init: OK\r\n");
 
     /* Attempt auto-connect from saved /fat32/WIFI.CFG */

@@ -171,7 +171,10 @@ build_kernel() {
         "$KERNEL/shell" \
         "$KERNEL/third_party/lwip/src/core" \
         "$KERNEL/third_party/lwip/src/netif" \
-        "$KERNEL/third_party/lwip_port"
+        "$KERNEL/third_party/lwip/src/apps/altcp_tls" \
+        "$KERNEL/third_party/lwip_port" \
+        "$KERNEL/third_party/mbedtls/library" \
+        "$KERNEL/third_party/mbedtls_port"
     do
         if [ -d "$dir" ]; then
             while IFS= read -r f; do
@@ -214,7 +217,10 @@ build_kernel() {
           -I"$KERNEL/core/sagelang/compiler" \
           -I"$KERNEL/third_party/lwip/src/include" \
           -I"$KERNEL/third_party/lwip_port/include" \
+          -I"$KERNEL/third_party/mbedtls_port/include" \
+          -I"$KERNEL/third_party/mbedtls/include" \
           -include "$KERNEL/include/sage_libc_shim.h" \
+          -DMBEDTLS_CONFIG_FILE='<mbedtls/mbedtls_config.h>' \
           -D__sageos__ \
           -DMETAL_STACK_SIZE=1024 \
           -DMETAL_POOL_SIZE=512 \
