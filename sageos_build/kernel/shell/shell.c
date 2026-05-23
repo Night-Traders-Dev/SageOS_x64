@@ -740,6 +740,41 @@ void shell_exec_command(const char *cmd) {
             console_write("\nSageLang VM and heap reset.");
             return;
         }
+        
+        const char *path = skip_spaces(mod);
+        if (*path) {
+            int len = 0;
+            while (path[len]) len++;
+            int is_file_path = 0;
+            if (len > 5 && path[len-5] == '.' && path[len-4] == 's' && path[len-3] == 'a' && path[len-2] == 'g' && path[len-1] == 'e') {
+                is_file_path = 1;
+            } else if (len > 5 && path[len-5] == '.' && path[len-4] == 's' && path[len-3] == 'g' && path[len-2] == 'v' && path[len-1] == 'm') {
+                is_file_path = 1;
+            }
+            for (int i = 0; i < len; i++) {
+                if (path[i] == '/') { is_file_path = 1; break; }
+            }
+
+            VfsStat st;
+            if (vfs_stat(path, &st) == 0) {
+                if (st.type == VFS_DIRECTORY) {
+                    console_write("\nsage: ");
+                    console_write(path);
+                    console_write(": Is a directory");
+                    return;
+                } else if (st.type == VFS_FILE) {
+                    extern void sage_run_file(const char *path);
+                    sage_run_file(path);
+                    return;
+                }
+            } else if (is_file_path) {
+                console_write("\nsage: ");
+                console_write(path);
+                console_write(": No such file");
+                return;
+            }
+        }
+
         extern void sage_execute(const char *module_name);
         sage_execute(mod);
         return;
