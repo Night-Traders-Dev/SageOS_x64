@@ -750,6 +750,12 @@ void shell_exec_command(const char *cmd) {
     if (starts_with(cmd, "hexdump")) { cmd_hexdump(arg_after(cmd, "hexdump")); return; }
     if (starts_word(cmd, "bmesg"))   { extern void cmd_bmesg(void); cmd_bmesg(); return; }
     if (starts_word(cmd, "dmesg"))   { extern void cmd_dmesg(void); cmd_dmesg(); return; }
+    if (starts_word(cmd, "dmesgsync")) {
+        extern void dmesg_save_persistent(void);
+        dmesg_save_persistent();
+        console_write("\nKernel log saved to persistent storage.");
+        return;
+    }
     if (starts_word(cmd, "shutdown") || starts_word(cmd, "poweroff")) { power_shutdown(); return; }
     if (starts_word(cmd, "suspend")) { power_suspend(); return; }
     if (starts_word(cmd, "halt"))    { power_halt(); return; }

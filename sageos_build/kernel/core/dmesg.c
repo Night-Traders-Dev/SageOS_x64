@@ -7,7 +7,7 @@
 
 #define DMESG_SIZE (128 * 1024)
 #define PERSISTENT_LBA 100
-#define PERSISTENT_SECTORS 32
+#define PERSISTENT_SECTORS (DMESG_SIZE / 512)
 
 static char dmesg_buf[DMESG_SIZE];
 static uint32_t dmesg_head = 0;
@@ -63,34 +63,45 @@ void dmesg_printf(const char *fmt, ...) {
 
 static int dmesg_at_bol = 1;
 
-void dmesg_log(const char *msg) {
-    if (dmesg_at_bol) {
-        uint64_t ticks = timer_ticks();
-        uint64_t sec = ticks / 100;
+static void append_timestamp(void) {
+    uint64_t ticks = timer_ticks();
+    uint64_t sec = ticks / 100;
 
-        append_char('[');
-        char buf[20];
-        int i = 0;
-        uint64_t v = sec;
-        if (v == 0) buf[i++] = '0';
-        while (v > 0) { buf[i++] = (char)('0' + (v % 10)); v /= 10; }
-        while (i > 0) append_char(buf[--i]);
-        append_char('.');
-        uint32_t csec = (uint32_t)(ticks % 100);
-        append_char((char)('0' + (csec / 10)));
-        append_char((char)('0' + (csec % 10)));
-        append_char('0'); append_char('0'); append_char('0'); append_char('0');
-        append_char(']'); append_char(' ');
-        dmesg_at_bol = 0;
+    append_char('[');
+    char buf[20];
+    int i = 0;
+    uint64_t v = sec;
+    if (v == 0) buf[i++] = '0';
+    while (v > 0) { buf[i++] = (char)('0' + (v % 10)); v /= 10; }
+    while (i > 0) append_char(buf[--i]);
+    append_char('.');
+    uint32_t csec = (uint32_t)(ticks % 100);
+    append_char((char)('0' + (csec / 10)));
+    append_char((char)('0' + (csec % 10)));
+    append_char('0'); append_char('0'); append_char('0'); append_char('0');
+    append_char(']'); append_char(' ');
+}
+
+void dmesg_log(const char *msg) {
+    if (!msg) return;
+
+    /* If we are not at the beginning of a line, force a newline
+       to ensure this new log entry starts fresh. */
+    if (!dmesg_at_bol) {
+        append_char('\n');
+        dmesg_at_bol = 1;
     }
 
     while (*msg) {
+        if (dmesg_at_bol) {
+            append_timestamp();
+            dmesg_at_bol = 0;
+        }
+
         char c = *msg++;
         append_char(c);
         if (c == '\n') dmesg_at_bol = 1;
     }
-    
-    dmesg_save_persistent();
 }
 
 void dmesg_dump(void) {
