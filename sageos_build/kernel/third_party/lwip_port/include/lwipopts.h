@@ -6,8 +6,7 @@
 /* Standard library overrides */
 #define LWIP_NO_INTTYPES_H 1
 #define LWIP_NO_CTYPE_H 1
-#define LWIP_ERRNO_STDINCLUDE   0
-#define LWIP_ERRNO_INCLUDE      "arch/errno.h"
+#define LWIP_PROVIDE_ERRNO      1
 
 #define LWIP_LIBC_EXCLUDES_STRING_H 0
 
@@ -40,7 +39,20 @@
 
 #define LWIP_STATS              0
 
+/* ALTCP and TLS */
+#define LWIP_ALTCP              1
+#define LWIP_ALTCP_TLS          1
+#define LWIP_ALTCP_TLS_MBEDTLS  1
+
 /* Timers in NO_SYS */
 #define LWIP_TIMERS             1
+
+/* Debugging */
+#define LWIP_DEBUG              1
+#define ALTCP_MBEDTLS_DEBUG     LWIP_DBG_ON
+#define ALTCP_MBEDTLS_LIB_DEBUG LWIP_DBG_ON
+#define HTTPC_DEBUG             LWIP_DBG_ON
+#define DNS_DEBUG               LWIP_DBG_ON
+#define TCP_DEBUG               LWIP_DBG_ON
 
 #endif

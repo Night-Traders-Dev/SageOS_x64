@@ -17,6 +17,11 @@
 #include "vfs.h"
 #include "sage_libc_shim.h"
 
+#include "lwip/apps/http_client.h"
+#include "lwip/altcp_tls.h"
+#include "lwip/dns.h"
+#include "mbedtls/ssl.h"
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -1004,10 +1009,47 @@ void cmd_ipconfig(void) {
 /* bmesg — boot log from /fat32/BOOTLOG.TXT                          */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* curl — HTTP/HTTPS client                                          */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    char dest[128];
+    uint64_t offset;
+    volatile int done;
+    volatile int result;
+    volatile int lwip_err;
+    uint32_t bytes_received;
+} curl_ctx_t;
+
+static struct altcp_tls_config *g_curl_tls_conf = NULL;
+
+static void curl_result_cb(void *arg, httpc_result_t httpc_result, u32_t rx_content_len, u32_t srv_res, err_t err) {
+    curl_ctx_t *ctx = (curl_ctx_t *)arg;
+    (void)rx_content_len;
+    (void)srv_res;
+    ctx->result = (int)httpc_result;
+    ctx->lwip_err = (int)err;
+    ctx->done = 1;
+}
+
+static err_t curl_recv_cb(void *arg, struct altcp_pcb *pcb, struct pbuf *p, err_t err) {
+    curl_ctx_t *ctx = (curl_ctx_t *)arg;
+    (void)err;
+    if (p) {
+        if (ctx->dest[0]) {
+            vfs_write(ctx->dest, ctx->offset, p->payload, p->tot_len);
+            ctx->offset += p->tot_len;
+        }
+        ctx->bytes_received += p->tot_len;
+        altcp_recved(pcb, p->tot_len);
+        pbuf_free(p);
+    }
+    return ERR_OK;
+}
+
 void cmd_curl(const char *args) {
-    console_write("\ncurl: fully functional clone\n");
-    
-    char url[128] = {0};
+    char url_raw[128] = {0};
     char dest[128] = {0};
     int has_o = 0;
     
@@ -1033,7 +1075,7 @@ void cmd_curl(const char *args) {
                 } else if (strcmp(token, "-o") == 0) {
                     has_o = 1;
                 } else if (strncmp(token, "http", 4) == 0) {
-                    strncpy(url, token, sizeof(url) - 1);
+                    strncpy(url_raw, token, sizeof(url_raw) - 1);
                 }
                 tpos = 0;
             }
@@ -1047,32 +1089,108 @@ void cmd_curl(const char *args) {
     if (tpos > 0) {
         token[tpos] = 0;
         if (has_o == 1) strncpy(dest, token, sizeof(dest) - 1);
-        else if (strncmp(token, "http", 4) == 0) strncpy(url, token, sizeof(url) - 1);
+        else if (strncmp(token, "http", 4) == 0) strncpy(url_raw, token, sizeof(url_raw) - 1);
     }
 
-    if (url[0] == 0) {
+    if (url_raw[0] == 0) {
         console_write("curl: try 'curl --help' or 'curl --manual' for more information\n");
         return;
     }
 
+    int is_https = 0;
+    const char *hostname = NULL;
+    const char *uri = "/";
+    char host_buf[128] = {0};
+
+    if (strncmp(url_raw, "https://", 8) == 0) {
+        is_https = 1;
+        hostname = url_raw + 8;
+    } else if (strncmp(url_raw, "http://", 7) == 0) {
+        hostname = url_raw + 7;
+    } else {
+        hostname = url_raw;
+    }
+
+    const char *slash = strchr(hostname, '/');
+    if (slash) {
+        int host_len = slash - hostname;
+        if (host_len < (int)sizeof(host_buf)) {
+            strncpy(host_buf, hostname, (size_t)host_len);
+            host_buf[host_len] = 0;
+            hostname = host_buf;
+        }
+        uri = slash;
+    }
+
+    uint16_t port = is_https ? 443 : 80;
+
     console_write("Fetching ");
-    console_write(url);
+    console_write(url_raw);
     console_write("...\n");
 
-    // We don't have a real TCP/IP stack yet, so we mock the fetch for sagepkg
-    if (strstr(url, "packages.json") != NULL) {
-        char buf[1024];
-        int n = vfs_read("/etc/packages.json", 0, buf, sizeof(buf) - 1);
-        if (n > 0) {
-            buf[n] = 0;
-            vfs_create(dest);
-            vfs_write(dest, 0, buf, n);
-            console_write("curl: (100) Download complete.\n");
-        } else {
-            console_write("curl: (6) Could not resolve host\n");
+    curl_ctx_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    if (dest[0]) {
+        strncpy(ctx.dest, dest, sizeof(ctx.dest) - 1);
+        vfs_create(ctx.dest);
+    }
+
+    httpc_connection_t settings;
+    memset(&settings, 0, sizeof(settings));
+    settings.result_fn = curl_result_cb;
+    
+    httpc_state_t *connection = NULL;
+#if LWIP_ALTCP_TLS
+    static altcp_allocator_t tls_allocator;
+    if (is_https) {
+        if (!g_curl_tls_conf) {
+            g_curl_tls_conf = altcp_tls_create_config_client(NULL, 0);
         }
+        tls_allocator.alloc = altcp_tls_alloc;
+        tls_allocator.arg = g_curl_tls_conf;
+        settings.altcp_allocator = &tls_allocator;
+    }
+#else
+    if (is_https) {
+        console_write("curl: HTTPS support disabled in this build\n");
+        return;
+    }
+#endif
+
+    err_t err = httpc_get_file_dns(hostname, port, uri, &settings, curl_recv_cb, &ctx, &connection);
+    if (err != ERR_OK) {
+        console_write("curl: failed to initiate request (err=");
+        console_u32((uint32_t)err);
+        console_write(")\n");
+        return;
+    }
+
+#if LWIP_ALTCP_TLS
+    if (is_https && connection) {
+        struct altcp_pcb *pcb = httpc_get_tcp_pcb(connection);
+        if (pcb) {
+            void *mbedtls_ctx = altcp_tls_context(pcb);
+            if (mbedtls_ctx) {
+                mbedtls_ssl_set_hostname((mbedtls_ssl_context *)mbedtls_ctx, hostname);
+            }
+        }
+    }
+#endif
+
+    while (!ctx.done) {
+        sched_yield();
+    }
+
+    if (ctx.result == HTTPC_RESULT_OK) {
+        console_write("curl: (100) Download complete. ");
+        console_u32(ctx.bytes_received);
+        console_write(" bytes received.\n");
     } else {
-        console_write("curl: (7) Failed to connect to host (TCP/IP stack not available)\n");
+        console_write("curl: download failed (result=");
+        console_u32((uint32_t)ctx.result);
+        console_write(", lwip_err=");
+        console_write(lwip_strerr((err_t)ctx.lwip_err));
+        console_write(")\n");
     }
 }
 

@@ -70,9 +70,8 @@ int  sage_snprintf(char *buf, size_t n, const char *fmt, ...);
 extern volatile int sage_exit_flag;
 extern int sage_exit_code;
 void sage_exit(int code);
-
-#define exit(c)          sage_exit(c)
-#define abort()          sage_exit(1)
+void exit(int code);
+void abort(void);
 
 /* Math */
 uint64_t sage_fmod(uint64_t x, uint64_t y);

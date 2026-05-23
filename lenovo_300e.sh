@@ -170,8 +170,10 @@ build_kernel() {
         "$KERNEL/fs" \
         "$KERNEL/shell" \
         "$KERNEL/third_party/lwip/src/core" \
+        "$KERNEL/third_party/lwip/src/api" \
         "$KERNEL/third_party/lwip/src/netif" \
         "$KERNEL/third_party/lwip/src/apps/altcp_tls" \
+        "$KERNEL/third_party/lwip/src/apps/http" \
         "$KERNEL/third_party/lwip_port" \
         "$KERNEL/third_party/mbedtls/library" \
         "$KERNEL/third_party/mbedtls_port"
@@ -179,7 +181,7 @@ build_kernel() {
         if [ -d "$dir" ]; then
             while IFS= read -r f; do
                 cfiles+=("$f")
-            done < <(find "$dir" -type f -name '*.c' | sort)
+            done < <(find "$dir" -type f -name '*.c' | grep -E -v "/(makefsdata|httpd|fs|fsdata|sockets|netdb|tcpip|netifapi|msg|api_lib|api_msg|if_api|slipif|lowpan6|zepif|ppp)\.c$" | sort)
         fi
     done
 

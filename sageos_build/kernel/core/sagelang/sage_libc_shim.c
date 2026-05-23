@@ -206,6 +206,8 @@ int sage_snprintf(char *buf, size_t n, const char *fmt, ...) {
 volatile int sage_exit_flag = 0;
 int sage_exit_code = 0;
 void sage_exit(int code) { sage_exit_flag = 1; sage_exit_code = code; }
+void exit(int code) { sage_exit(code); }
+void abort(void) { sage_exit(1); }
 
 /* --- Integer math / char classification --- */
 
