@@ -187,8 +187,15 @@ done:
 
 int sage_vsnprintf(char *buf, size_t n, const char *fmt, __builtin_va_list ap) {
     size_t pos = 0;
-    while (*fmt && pos + 1 < n) {
-        if (*fmt != '%') { buf[pos++] = *fmt++; continue; }
+    while (*fmt) {
+        if (*fmt != '%') {
+            if (buf && pos + 1 < n) {
+                buf[pos] = *fmt;
+            }
+            pos++;
+            fmt++;
+            continue;
+        }
         fmt++;
         
         int width = 0;
@@ -207,7 +214,13 @@ int sage_vsnprintf(char *buf, size_t n, const char *fmt, __builtin_va_list ap) {
         if (*fmt == 's') {
             const char *s = __builtin_va_arg(ap, const char *);
             if (!s) s = "(null)";
-            while (*s && pos + 1 < n) buf[pos++] = *s++;
+            while (*s) {
+                if (buf && pos + 1 < n) {
+                    buf[pos] = *s;
+                }
+                pos++;
+                s++;
+            }
         } else if (*fmt == 'd' || *fmt == 'u' || *fmt == 'x' || *fmt == 'X' || *fmt == 'p') {
             uint64_t uv;
             int neg = 0;
@@ -232,19 +245,54 @@ int sage_vsnprintf(char *buf, size_t n, const char *fmt, __builtin_va_list ap) {
             int total_len = tp + neg;
             if (width > total_len) {
                 int pad = width - total_len;
-                if (neg && zero_pad) { buf[pos++] = '-'; neg = 0; }
-                while (pad-- > 0 && pos + 1 < n) buf[pos++] = (char)(zero_pad ? '0' : ' ');
+                if (neg && zero_pad) {
+                    if (buf && pos + 1 < n) {
+                        buf[pos] = '-';
+                    }
+                    pos++;
+                    neg = 0;
+                }
+                while (pad-- > 0) {
+                    if (buf && pos + 1 < n) {
+                        buf[pos] = (char)(zero_pad ? '0' : ' ');
+                    }
+                    pos++;
+                }
             }
-            if (neg && pos + 1 < n) buf[pos++] = '-';
-            while (tp > 0 && pos + 1 < n) buf[pos++] = tmp[--tp];
+            if (neg) {
+                if (buf && pos + 1 < n) {
+                    buf[pos] = '-';
+                }
+                pos++;
+            }
+            while (tp > 0) {
+                if (buf && pos + 1 < n) {
+                    buf[pos] = tmp[tp - 1];
+                }
+                pos++;
+                tp--;
+            }
         } else if (*fmt == 'c') {
-            buf[pos++] = (char)__builtin_va_arg(ap, int);
+            char c = (char)__builtin_va_arg(ap, int);
+            if (buf && pos + 1 < n) {
+                buf[pos] = c;
+            }
+            pos++;
         } else if (*fmt == '%') {
-            buf[pos++] = '%';
+            if (buf && pos + 1 < n) {
+                buf[pos] = '%';
+            }
+            pos++;
         }
         if (*fmt) fmt++;
     }
-    if (n > 0) buf[pos] = '\0';
+    if (buf && n > 0) {
+        if (pos < n) {
+            buf[pos] = '\0';
+        } else {
+            buf[n - 1] = '\0';
+        }
+    }
     return (int)pos;
 }
 
