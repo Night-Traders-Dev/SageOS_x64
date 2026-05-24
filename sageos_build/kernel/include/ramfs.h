@@ -12,7 +12,7 @@
  * with fixed-size structures and no dynamic allocation.
  * ----------------------------------------------------------------------- */
 
-#define RAMFS_MAX_INODES   128
+#define RAMFS_MAX_INODES   512
 #define RAMFS_MAX_CHILDREN  32    /* max entries per directory */
 #define RAMFS_DATA_POOL  65536    /* 64 KB data pool for file contents */
 #define RAMFS_NAME_MAX      64

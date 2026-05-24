@@ -76,25 +76,83 @@ typedef void FILE;
 #undef fputs
 #undef getline
 
-void* fopen(const char* p, const char* m) { (void)p; (void)m; return (void*)0; }
+typedef struct {
+    char path[256];
+    uint64_t offset;
+    uint64_t size;
+} SageFile;
+
+void* fopen(const char* p, const char* m) { 
+    (void)m; // ignore mode, assume read
+    struct stat st;
+    if (stat(p, &st) == 0) {
+        extern void* kernel_malloc(size_t);
+        SageFile* f = kernel_malloc(sizeof(SageFile));
+        sage_strncpy(f->path, p, 255);
+        f->path[255] = '\0';
+        f->offset = 0;
+        f->size = st.st_size;
+        return f;
+    }
+    return (void*)0; 
+}
 void* sage_fopen(const char* p, const char* m) { return fopen(p, m); }
 
-int fclose(void* f) { (void)f; return 0; }
+int fclose(void* f) { 
+    if (f) {
+        extern void kernel_free(void*);
+        kernel_free(f);
+    }
+    return 0; 
+}
 int sage_fclose(void* f) { return fclose(f); }
 
 size_t fwrite(const void* p, size_t s, size_t n, void* f) { (void)p; (void)s; (void)n; (void)f; return 0; }
 size_t sage_fwrite(const void* p, size_t s, size_t n, void* f) { return fwrite(p, s, n, f); }
 
-size_t fread(void* p, size_t s, size_t n, void* f) { (void)p; (void)s; (void)n; (void)f; return 0; }
+size_t fread(void* p, size_t s, size_t n, void* f) { 
+    if (!f || !p) return 0;
+    SageFile* file = (SageFile*)f;
+    size_t to_read = s * n;
+    if (file->offset + to_read > file->size) {
+        to_read = file->size - file->offset;
+    }
+    extern void console_write(const char*);
+    // console_write("[port] fread: "); console_write(file->path); console_write("\n");
+    int res = vfs_read(file->path, file->offset, p, to_read);
+    if (res > 0) {
+        file->offset += res;
+        return res / s;
+    }
+    // console_write("[port] fread: FAILED\n");
+    return 0;
+}
 size_t sage_fread(void* p, size_t s, size_t n, void* f) { return fread(p, s, n, f); }
 
-int fseek(void* f, long o, int w) { (void)f; (void)o; (void)w; return -1; }
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
+int fseek(void* f, long o, int w) { 
+    if (!f) return -1;
+    SageFile* file = (SageFile*)f;
+    if (w == SEEK_SET) file->offset = o;
+    else if (w == SEEK_CUR) file->offset += o;
+    else if (w == SEEK_END) file->offset = file->size + o;
+    if (file->offset > file->size) file->offset = file->size;
+    return 0; 
+}
 int sage_fseek(void* f, long o, int w) { return fseek(f, o, w); }
 
-long ftell(void* f) { (void)f; return -1; }
+long ftell(void* f) { 
+    if (!f) return -1;
+    return (long)((SageFile*)f)->offset; 
+}
 long sage_ftell(void* f) { return ftell(f); }
 
-void rewind(void* f) { (void)f; }
+void rewind(void* f) { 
+    if (f) ((SageFile*)f)->offset = 0; 
+}
 void sage_rewind(void* f) { rewind(f); }
 
 int remove(const char* p) { (void)p; return -1; }

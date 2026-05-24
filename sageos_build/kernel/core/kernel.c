@@ -40,6 +40,7 @@ extern MetalVM g_repl_vm;
 extern int fat32_init(void);
 static void shell_main_thread(void *arg) {
     (void)arg;
+    extern void shell_run(void);
 
     dmesg_log("shell thread started");
     bootlog("[KRN] shell thread running\r\n");
@@ -47,7 +48,7 @@ static void shell_main_thread(void *arg) {
      * before we block on the first keyboard_wait_event() call. */
     console_periodic_flip();
     for (;;) {
-        sage_shell_run();
+        shell_run();
     }
 }
 

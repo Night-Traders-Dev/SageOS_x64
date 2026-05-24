@@ -152,6 +152,9 @@ download_firmware() {
 build_kernel() {
     mkdir -p "$OBJ"
 
+    echo "--- Building actual SageLang (libsage.a) ---"
+    (cd "$BUILD/sage_lang/core" && make -f Makefile.sageos -j$(nproc 2>/dev/null || echo 4))
+
     echo "--- Syncing version header ---"
     local version
     version=$(cat "$ROOT/VERSION" | tr -d '\r\n')
@@ -347,14 +350,6 @@ build_image() {
     cp "$BUILD/sage_lang/core/lib/io.sage" "$kernel_bin/io.sage" 2>/dev/null || true
     cp "$BUILD/sage_pkg/packages.json" "$KERNEL/etc/packages.json"
 
-    # Generate embedded commands and etc files header
-    if [ -d "$KERNEL/etc" ]; then
-        python3 "$KERNEL/fs/embed_commands.py" "$KERNEL/etc" "$KERNEL/fs/commands_embed.h"
-    else
-        echo "/* No commands to embed */" > "$KERNEL/fs/commands_embed.h"
-        echo "static void ramfs_embed_commands(void) {}" >> "$KERNEL/fs/commands_embed.h"
-    fi
-
     if command -v sage > /dev/null 2>&1; then
         bash "$BUILD/scripts/compile_sage_shell.sh" sage "$KERNEL/shell"
     elif [ -x "$BUILD/sage_lang/sage" ]; then
@@ -382,6 +377,14 @@ STUBEOF
 static const uint8_t vfs_bridge_bytecode[] = { 0xFF };
 static const int vfs_bridge_bytecode_len = 1;
 STUBEOF
+    fi
+
+    # Generate embedded commands and etc files header
+    if [ -d "$KERNEL/etc" ]; then
+        python3 "$KERNEL/fs/embed_commands.py" "$KERNEL/etc" "$KERNEL/fs/commands_embed.h"
+    else
+        echo "/* No commands to embed */" > "$KERNEL/fs/commands_embed.h"
+        echo "static void ramfs_embed_commands(void) {}" >> "$KERNEL/fs/commands_embed.h"
     fi
 
     build_kernel

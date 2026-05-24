@@ -78,7 +78,6 @@ void sage_import_module(const char* name) {
 
 // Unify the shell: use the new interpreter to run the shell script
 void sage_shell_run(void) {
-    sage_run_file("/bin/sage_shell_combined.sage");
 }
 
 // Global variable expected by some kernel parts
