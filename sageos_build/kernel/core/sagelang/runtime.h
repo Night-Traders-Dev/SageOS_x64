@@ -1,24 +1,13 @@
-#ifndef SAGEOS_SAGELANG_RUNTIME_H
-#define SAGEOS_SAGELANG_RUNTIME_H
+#ifndef SAGE_RUNTIME_BRIDGE_H
+#define SAGE_RUNTIME_BRIDGE_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <stdint.h>
+#include <stddef.h>
 
-// Initialize the SageLang REPL/Runtime
+// Bridge for the old kernel code to the new SageLang runtime
+void sage_execute(const char* line);
+void sage_run_file(const char* path);
+void sage_import_module(const char* name);
 void sage_repl_init(void);
 
-// Execute a single line of SageLang code
-void sage_repl_step(const char* line);
-
-// Execute inline Sage code or enter the interactive REPL
-void sage_execute(const char* line);
-
-// Run a .sage or .sagec file
-void sage_run_file(const char* path);
-
-#ifdef __cplusplus
-}
 #endif
-
-#endif // SAGEOS_SAGELANG_RUNTIME_H

@@ -126,6 +126,7 @@ static int btrfs_be_readdir(VfsBackend *self, const char *rel_path,
 static int btrfs_be_read(VfsBackend *self, const char *rel_path,
                          uint64_t offset, void *buffer, size_t size) {
     (void)self;
+    (void)rel_path;
     if (!btrfs_available) return VFS_EIO;
     
     /* Dummy content for testing the VFS path */

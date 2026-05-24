@@ -30,7 +30,7 @@ SageOS is a lightweight, x86_64 UEFI-based operating system project primarily ta
 ## Key Features
 
 - **UEFI-Native Boot**: Freestanding kernel execution with GOP framebuffer console.
-- **SageShell & MetalVM**: A kernel-resident, SageLang-driven shell with fish-style line editing and high-performance bytecode execution.
+- **SageShell & Full SageLang Integration**: A kernel-resident shell driven by the feature-complete SageLang engine (v3.5+). Supports classes, modules, exceptions, and high-performance bytecode execution.
 - **QCA6174A Wi-Fi Driver**: Full PCI enumeration, firmware staging (firmware-6.bin / board-2.bin downloaded fresh each build), WMI/HTT ring initialization, WPA2-PSK handshake, and DHCP. Credentials are saved to `/fat32/WIFI.CFG` and auto-reconnect on boot.
 - **Hardware Abstraction**: Early diagnostics for SMP, ACPI, battery/EC, and PCI bus.
 - **Programmable Init**: System initialization orchestrated via `init.sage`.
@@ -82,7 +82,7 @@ Credentials saved to `/fat32/WIFI.CFG` are automatically loaded on boot and a re
 ```text
 SageOS_300e/
 ├── lenovo_300e.sh           # Unified build/flash/qemu script
-├── VERSION                  # Current operating system version (0.1.98)
+├── VERSION                  # Current operating system version (0.2.0)
 ├── sageos_build/
 │   ├── kernel/              # Core kernel, drivers, VFS, shell
 │   │   ├── core/            # Kernel entry, scheduler, VMM, SageLang VM

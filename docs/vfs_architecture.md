@@ -40,7 +40,7 @@ static VfsMount g_mounts[MAX_MOUNTS];
 static int g_mount_count = 0;
 ```
 
-### Handoff / Mount Layout (v0.1.92)
+### Handoff / Mount Layout (v0.2.0)
 1. **`/`** — Mounted to `ramfs_get_backend()`. Houses system tools, package indices (`/etc/packages.json`), system configuration (`/etc/init.sage`), and runtime diagnostics.
 2. **`/fat32`** — Mounted to `fat32_get_backend()`. Exposes the physical ESP partition of the boot USB or local storage. Used to load large binary drivers, blobs, and persist network/supplicant configurations (`WIFI.CFG`).
 3. **`/btrfs`** — Mounted to `btrfs_get_backend()`. Exposes high-capacity BTRFS partitions for robust primary storage.

@@ -15,6 +15,12 @@
 static uint8_t sage_heap[SAGE_ARENA_SIZE] __attribute__((aligned(16)));
 static size_t sage_bump = 0;
 
+/* Memory allocation helpers — freestanding/bump implementation */
+void* kernel_malloc(size_t size) { return sage_malloc(size); }
+void* kernel_realloc(void* ptr, size_t size) { return sage_realloc(ptr, size); }
+void* kernel_calloc(size_t n, size_t size) { return sage_calloc(n, size); }
+void  kernel_free(void* ptr) { sage_free(ptr); }
+
 void *sage_malloc(size_t size) {
     size_t raw_size = size;
     size = (size + 15) & ~(size_t)15;
@@ -369,22 +375,24 @@ long sage_strtol(const char *s, char **end, int base) {
     return neg ? -res : res;
 }
 
-void vfprintf(void* stream, const char* fmt, __builtin_va_list ap) {
+int vfprintf(void* stream, const char* fmt, __builtin_va_list ap) {
     (void)stream;
-    while (*fmt) {
-        if (*fmt != '%') { console_putc(*fmt++); continue; }
-        fmt++;
-        if (*fmt == 's') { const char *s = __builtin_va_arg(ap, const char *); console_write(s ? s : "(null)"); }
-        else if (*fmt == 'd') { int v = __builtin_va_arg(ap, int); if (v < 0) { console_putc('-'); put_uint((uint64_t)(-(int64_t)v)); } else put_uint((uint64_t)v); }
-        else if (*fmt == 'u') { unsigned v = __builtin_va_arg(ap, unsigned); put_uint(v); }
-        else if (*fmt == 'c') { int c = __builtin_va_arg(ap, int); console_putc((char)c); }
-        else if (*fmt == '.') { /* skip precision for now */ while (*fmt && (*fmt < 'a' || *fmt > 'z')) fmt++; continue; }
-        else if (*fmt == '%') console_putc('%');
-        fmt++;
-    }
+    char buf[1024];
+    int n = sage_vsnprintf(buf, sizeof(buf), fmt, ap);
+    console_write(buf);
+    return n;
 }
 
-void fputc(int c, void* stream) { (void)stream; console_putc((char)c); }
+int fputc(int c, void* stream) {
+    (void)stream;
+    console_putc((char)c);
+    return c;
+}
+
+int putchar(int c) {
+    console_putc((char)c);
+    return c;
+}
 
 /* Dummy math functions for compiler linking */
 uint64_t sage_fmod(uint64_t x, uint64_t y) { (void)x; (void)y; return 0; }

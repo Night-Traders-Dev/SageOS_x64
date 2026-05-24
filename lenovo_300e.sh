@@ -157,6 +157,9 @@ build_kernel() {
     version=$(cat "$ROOT/VERSION" | tr -d '\r\n')
     echo "#define SAGEOS_VERSION \"$version\"" > "$KERNEL/include/version.h"
 
+    echo "--- Building actual SageLang (libsage.a) ---"
+    (cd "$BUILD/sage_lang/core" && make -f Makefile.sageos)
+
     echo "--- Building kernel: modular freestanding x86_64 C/ASM ---"
 
     rm -f "$OBJ"/*.o "$OBJ"/*.obj 2>/dev/null || true
@@ -180,6 +183,10 @@ build_kernel() {
     do
         if [ -d "$dir" ]; then
             while IFS= read -r f; do
+                # Exclude old compiler files and backup directories
+                if [[ "$f" =~ compiler_old ]] || [[ "$f" =~ metal/ ]]; then
+                    continue
+                fi
                 cfiles+=("$f")
             done < <(find "$dir" -type f -name '*.c' | grep -E -v "/(makefsdata|httpd|fs|fsdata|sockets|netdb|tcpip|netifapi|msg|api_lib|api_msg|if_api|slipif|lowpan6|zepif|ppp)\.c$" | sort)
         fi
@@ -212,11 +219,18 @@ build_kernel() {
           -msoft-float \
           -mno-sse \
           -mno-sse2 \
+          -mno-80387 \
           -Wall \
           -Wextra \
+          -Wno-unterminated-string-initialization \
+          -Wno-unused-function \
+          -isystem "$BUILD/actual_sagelang_build/libc" \
           -I"$KERNEL/include" \
           -I"$KERNEL/core/sagelang" \
-          -I"$KERNEL/core/sagelang/compiler" \
+          -I"$BUILD/sage_lang/core/include" \
+          -I"$BUILD/sage_lang/core/src/vm" \
+          -I"$BUILD/actual_sagelang_build" \
+          -I"$BUILD/actual_sagelang_build/libc" \
           -I"$KERNEL/third_party/lwip/src/include" \
           -I"$KERNEL/third_party/lwip_port/include" \
           -I"$KERNEL/third_party/mbedtls_port/include" \
@@ -224,13 +238,8 @@ build_kernel() {
           -include "$KERNEL/include/sage_libc_shim.h" \
           -DMBEDTLS_CONFIG_FILE='<mbedtls/mbedtls_config.h>' \
           -D__sageos__ \
-          -DMETAL_STACK_SIZE=1024 \
-          -DMETAL_POOL_SIZE=512 \
-          -DMETAL_STRING_POOL=131072 \
-          -DMETAL_HEAP_SIZE=1048576 \
-          -DMETAL_CONST_POOL=1024 \
-          -DMETAL_NATIVE_MAX=128 \
           -DSAGEOS_FIRMWARE_I8042_FALLBACK="${SAGEOS_FIRMWARE_I8042_FALLBACK:-1}" \
+          -DCHAR_BIT=8 \
           -c "$src" \
           -o "$obj"
 
@@ -256,6 +265,7 @@ build_kernel() {
       -T "$KERNEL/linker.ld" \
       "$OBJ/entry.o" \
       "${objs[@]}" \
+      "$BUILD/sage_lang/core/libsage.a" \
       -o "$BUILD/kernel.elf"
     # Extract binary sections into a flat image
     # Note: we truncate the binary to kernel_extent so the UEFI loader

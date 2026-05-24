@@ -1,6 +1,6 @@
 # SageOS Init System (SageInit)
 
-SageOS uses a programmable init system written in **SageLang**. This allows for flexible, scriptable system bring-up without modifying the kernel's C code for every initialization change.
+SageOS uses a programmable init system written in **SageLang**. This allows for flexible, scriptable system bring-up without modifying the kernel's C code for every initialization change. The init system is powered by the feature-complete SageLang interpreter (v3.5+).
 
 ## Overview
 
@@ -67,7 +67,7 @@ The init system has access to a variety of native APIs exposed by the kernel:
 
 ## Advantages
 
-- **Programmable**: Logic can be as complex as needed using SageLang.
+- **Feature Complete**: Full SageLang v3.5 support including classes, modules, and exceptions.
 - **Decoupled**: Kernel bring-up and system configuration are separated.
 - **Flexible**: Easy to add "Live" vs "Installer" detection logic.
 - **Resilient**: Benefits from formal memory management and a read-write capable VFS layer.

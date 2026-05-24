@@ -73,13 +73,7 @@ void sage_exit(int code);
 void exit(int code);
 void abort(void);
 
-/* Math */
-uint64_t sage_fmod(uint64_t x, uint64_t y);
-uint64_t sage_fabs(uint64_t x);
-uint64_t sage_floor(uint64_t x);
-uint64_t sage_ceil(uint64_t x);
-uint64_t sage_pow(uint64_t b, uint64_t e);
-uint64_t sage_sqrt(uint64_t x);
+/* Math - removed to avoid conflicts with full SageLang */
 uint64_t sage_strtod(const char *s, char **end);
 long     sage_strtol(const char *s, char **end, int base);
 int    sage_atoi(const char *s);
@@ -88,12 +82,6 @@ int    sage_isalpha(int c);
 int    sage_isalnum(int c);
 int    sage_isspace(int c);
 
-#define fmod(x,y)        sage_fmod(x,y)
-#define fabs(x)          sage_fabs(x)
-#define floor(x)         sage_floor(x)
-#define ceil(x)          sage_ceil(x)
-#define pow(b,e)         sage_pow(b,e)
-#define sqrt(x)          sage_sqrt(x)
 #define strtod(s,e)      sage_strtod(s,e)
 #define strtol(s,e,b)    sage_strtol(s,e,b)
 #define atoi(s)          sage_atoi(s)
@@ -106,17 +94,12 @@ int sage_vsnprintf(char *buf, size_t n, const char *fmt, __builtin_va_list ap);
 #define vsnprintf        sage_vsnprintf
 
 /* Suppress headers that would conflict */
-#define _STDIO_H 1
-#define _STDLIB_H 1
-#define _STRING_H 1
-#define _MATH_H 1
-#define _CTYPE_H 1
-#define _SETJMP_H 1
-#define _ASSERT_H 1
-#define _TIME_H 1
-#define _FEATURES_H 1
-#define _SYS_TYPES_H 1
-#define _INTTYPES_H 1
+/* Standard library redirection */
+#include <stdint.h>
+#include <stddef.h>
+
+/* Headers are now provided by actual_sagelang_build/libc if nostdlibinc/isystem is used, 
+   otherwise by system. Redirections below. */
 
 typedef uint64_t time_t;
 typedef uint64_t clock_t;
@@ -132,8 +115,8 @@ typedef void FILE;
 #define stdout ((FILE*)0)
 #define stdin  ((FILE*)0)
 #define fflush(f) ((void)0)
-void vfprintf(FILE* stream, const char* fmt, __builtin_va_list args);
-void fputc(int c, FILE* stream);
+int vfprintf(FILE* stream, const char* fmt, __builtin_va_list args);
+int fputc(int c, FILE* stream);
 
 static inline int sage_tolower(int c) {
     if (c >= 'A' && c <= 'Z') return c + ('a' - 'A');
@@ -146,7 +129,7 @@ static inline int sage_toupper(int c) {
 #define tolower(c) sage_tolower(c)
 #define toupper(c) sage_toupper(c)
 #define isspace(c) sage_isspace(c)
-#define putchar(c) console_putc((char)(c))
+int putchar(int c);
 
 /* NULL */
 #ifndef NULL
