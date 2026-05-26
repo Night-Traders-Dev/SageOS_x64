@@ -474,7 +474,7 @@ qemu_run() {
       -accel tcg,thread=single \
       -cpu Skylake-Client,-pcid,-tsc-deadline,-hle,-invpcid,-rtm,-xsave \
       -drive id=hd0,file="$target_img",format=raw,media=disk,snapshot=on \
-      -m 256M \
+      -m 4G \
       -display none \
       -serial stdio \
       -netdev user,id=net0 \
