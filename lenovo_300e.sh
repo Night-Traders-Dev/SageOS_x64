@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD="$ROOT/sageos_build"
+BUILD="$ROOT/src"
+CORE="$ROOT/core/sageos_build"
 BOOT="$BUILD/boot"
 KERNEL="$BUILD/kernel"
 OBJ="$BUILD/obj"
@@ -11,7 +12,6 @@ ESP="$BUILD/esp.img"
 
 IMG_LIVE="$ROOT/sageos-live.img"
 IMG_INSTALLER="$ROOT/sageos-installer.img"
-ESP="$BUILD/esp.img"
 FW_DIR="$ROOT/firmware"
 
 # Live Image Config
@@ -153,7 +153,10 @@ build_kernel() {
     mkdir -p "$OBJ"
 
     echo "--- Building actual SageLang (libsage.a) ---"
-    (cd "$BUILD/sage_lang/core" && make -f Makefile.sageos -j$(nproc 2>/dev/null || echo 4))
+    (cd "$CORE/sage_lang/core" && make -f Makefile.sageos \
+        PORT_INC="$CORE/actual_sagelang_build" \
+        KERNEL_INC="$KERNEL/include" \
+        -j$(nproc 2>/dev/null || echo 4))
 
     echo "--- Syncing version header ---"
     local version
@@ -161,7 +164,9 @@ build_kernel() {
     echo "#define SAGEOS_VERSION \"$version\"" > "$KERNEL/include/version.h"
 
     echo "--- Building actual SageLang (libsage.a) ---"
-    (cd "$BUILD/sage_lang/core" && make -f Makefile.sageos)
+    (cd "$CORE/sage_lang/core" && make -f Makefile.sageos \
+        PORT_INC="$CORE/actual_sagelang_build" \
+        KERNEL_INC="$KERNEL/include")
 
     echo "--- Building kernel: modular freestanding x86_64 C/ASM ---"
 
@@ -175,14 +180,14 @@ build_kernel() {
         "$KERNEL/drivers" \
         "$KERNEL/fs" \
         "$KERNEL/shell" \
-        "$KERNEL/third_party/lwip/src/core" \
-        "$KERNEL/third_party/lwip/src/api" \
-        "$KERNEL/third_party/lwip/src/netif" \
-        "$KERNEL/third_party/lwip/src/apps/altcp_tls" \
-        "$KERNEL/third_party/lwip/src/apps/http" \
-        "$KERNEL/third_party/lwip_port" \
-        "$KERNEL/third_party/mbedtls/library" \
-        "$KERNEL/third_party/mbedtls_port"
+        "$CORE/kernel/third_party/lwip/src/core" \
+        "$CORE/kernel/third_party/lwip/src/api" \
+        "$CORE/kernel/third_party/lwip/src/netif" \
+        "$CORE/kernel/third_party/lwip/src/apps/altcp_tls" \
+        "$CORE/kernel/third_party/lwip/src/apps/http" \
+        "$CORE/kernel/third_party/lwip_port" \
+        "$CORE/kernel/third_party/mbedtls/library" \
+        "$CORE/kernel/third_party/mbedtls_port"
     do
         if [ -d "$dir" ]; then
             while IFS= read -r f; do
@@ -227,17 +232,17 @@ build_kernel() {
           -Wextra \
           -Wno-unterminated-string-initialization \
           -Wno-unused-function \
-          -isystem "$BUILD/actual_sagelang_build/libc" \
+          -isystem "$CORE/actual_sagelang_build/libc" \
           -I"$KERNEL/include" \
           -I"$KERNEL/core/sagelang" \
-          -I"$BUILD/sage_lang/core/include" \
-          -I"$BUILD/sage_lang/core/src/vm" \
-          -I"$BUILD/actual_sagelang_build" \
-          -I"$BUILD/actual_sagelang_build/libc" \
-          -I"$KERNEL/third_party/lwip/src/include" \
-          -I"$KERNEL/third_party/lwip_port/include" \
-          -I"$KERNEL/third_party/mbedtls_port/include" \
-          -I"$KERNEL/third_party/mbedtls/include" \
+          -I"$CORE/sage_lang/core/include" \
+          -I"$CORE/sage_lang/core/src/vm" \
+          -I"$CORE/actual_sagelang_build" \
+          -I"$CORE/actual_sagelang_build/libc" \
+          -I"$CORE/kernel/third_party/lwip/src/include" \
+          -I"$CORE/kernel/third_party/lwip_port/include" \
+          -I"$CORE/kernel/third_party/mbedtls_port/include" \
+          -I"$CORE/kernel/third_party/mbedtls/include" \
           -include "$KERNEL/include/sage_libc_shim.h" \
           -DMBEDTLS_CONFIG_FILE='<mbedtls/mbedtls_config.h>' \
           -D__sageos__ \
@@ -268,7 +273,7 @@ build_kernel() {
       -T "$KERNEL/linker.ld" \
       "$OBJ/entry.o" \
       "${objs[@]}" \
-      "$BUILD/sage_lang/core/libsage.a" \
+      "$CORE/sage_lang/core/libsage.a" \
       -o "$BUILD/kernel.elf"
     # Extract binary sections into a flat image
     # Note: we truncate the binary to kernel_extent so the UEFI loader
@@ -342,18 +347,18 @@ build_image() {
     echo "--- Integrating SagePkg ---"
     local kernel_bin="$KERNEL/bin"
     mkdir -p "$kernel_bin"
-    cp "$BUILD/sage_pkg/packages/sagepkg/universal/sagepkg.sage" "$kernel_bin/sagepkg.sage"
-    cp "$BUILD/sage_pkg/lib/json.sage" "$kernel_bin/json.sage"
-    cp "$BUILD/sage_lang/core/lib/string.sage" "$kernel_bin/string.sage"
-    cp "$BUILD/sage_lang/core/lib/strings.sage" "$kernel_bin/strings.sage"
-    cp "$BUILD/sage_lang/core/lib/sys.sage" "$kernel_bin/sys.sage" 2>/dev/null || true
-    cp "$BUILD/sage_lang/core/lib/io.sage" "$kernel_bin/io.sage" 2>/dev/null || true
-    cp "$BUILD/sage_pkg/packages.json" "$KERNEL/etc/packages.json"
+    cp "$CORE/sage_pkg/packages/sagepkg/universal/sagepkg.sage" "$kernel_bin/sagepkg.sage"
+    cp "$CORE/sage_pkg/lib/json.sage" "$kernel_bin/json.sage"
+    cp "$CORE/sage_lang/core/lib/string.sage" "$kernel_bin/string.sage"
+    cp "$CORE/sage_lang/core/lib/strings.sage" "$kernel_bin/strings.sage"
+    cp "$CORE/sage_lang/core/lib/sys.sage" "$kernel_bin/sys.sage" 2>/dev/null || true
+    cp "$CORE/sage_lang/core/lib/io.sage" "$kernel_bin/io.sage" 2>/dev/null || true
+    cp "$CORE/sage_pkg/packages.json" "$KERNEL/etc/packages.json"
 
     if command -v sage > /dev/null 2>&1; then
-        bash "$BUILD/scripts/compile_sage_shell.sh" sage "$KERNEL/shell"
-    elif [ -x "$BUILD/sage_lang/sage" ]; then
-        bash "$BUILD/scripts/compile_sage_shell.sh" "$BUILD/sage_lang/sage" "$KERNEL/shell"
+        bash "$CORE/scripts/compile_sage_shell.sh" sage "$KERNEL/shell"
+    elif [ -x "$CORE/sage_lang/sage" ]; then
+        bash "$CORE/scripts/compile_sage_shell.sh" "$CORE/sage_lang/sage" "$KERNEL/shell"
     else
         echo "WARN: 'sage' not found on PATH and submodule not built — skipping SageShell bytecode compile."
         cat > "$KERNEL/shell/sage_shell_bytecode.h" <<'STUBEOF'
@@ -366,9 +371,9 @@ STUBEOF
 
     echo "--- Compiling SageLang VFS bridge (vfs_bridge) ---"
     if command -v sage > /dev/null 2>&1; then
-        bash "$BUILD/scripts/compile_vfs_bridge.sh" sage
-    elif [ -x "$BUILD/sage_lang/sage" ]; then
-        bash "$BUILD/scripts/compile_vfs_bridge.sh" "$BUILD/sage_lang/sage"
+        bash "$CORE/scripts/compile_vfs_bridge.sh" sage "$KERNEL/fs"
+    elif [ -x "$CORE/sage_lang/sage" ]; then
+        bash "$CORE/scripts/compile_vfs_bridge.sh" "$CORE/sage_lang/sage" "$KERNEL/fs"
     else
         echo "WARN: sage not found — using stub vfs_bridge_bytecode.h"
         cat > "$KERNEL/fs/vfs_bridge_bytecode.h" <<'STUBEOF'
@@ -607,7 +612,7 @@ case "$cmd" in
 
         if [ ! -f "$KERNEL/fs/vfs_bridge_bytecode.h" ]; then
             if command -v sage > /dev/null 2>&1; then
-                bash "$BUILD/scripts/compile_vfs_bridge.sh" sage
+                bash "$CORE/scripts/compile_vfs_bridge.sh" sage "$KERNEL/fs"
             else
                 cat > "$KERNEL/fs/vfs_bridge_bytecode.h" <<'STUBEOF'
 #pragma once
